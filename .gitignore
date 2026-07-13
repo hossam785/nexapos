@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+releases
+*.log
+.DS_Store
+*.db
+*.sqlite
+*.sqlite-journal
+Recovery Files

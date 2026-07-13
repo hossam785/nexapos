@@ -1,0 +1,52 @@
+{
+  "name": "mg-pos",
+  "version": "2.2.2",
+  "description": "MGIVIA POS desktop application",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev:react": "vite",
+    "dev": "concurrently \"vite\" \"cross-env NODE_ENV=development electron .\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean:admin": "node scripts/clean-release.js admin",
+    "clean:cashier": "node scripts/clean-release.js cashier",
+    "clean:all": "node scripts/clean-release.js all",
+    "dist": "vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config electron-builder.admin.js",
+    "dist:dir": "vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --dir --config electron-builder.admin.js",
+    "dist:admin": "node scripts/clean-release.js admin && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config electron-builder.admin.js",
+    "dist:admin:dir": "node scripts/clean-release.js admin && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --dir --config electron-builder.admin.js",
+    "dist:cashier": "node scripts/clean-release.js cashier && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config electron-builder.cashier.js",
+    "dist:cashier:dir": "node scripts/clean-release.js cashier && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --dir --config electron-builder.cashier.js",
+    "dist:final-setups": "node scripts/prepare-final-setups.js",
+    "dist:runtimes": "node scripts/clean-release.js all && npm run dist:admin && npm run dist:cashier && npm run dist:final-setups",
+    "license": "node license-generator/generate.js",
+    "recovery": "node scripts/generate-recovery.js"
+  },
+  "keywords": [],
+  "author": "MG",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.0.3",
+    "electron-builder": "^26.8.1",
+    "vite": "^8.0.2"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "better-sqlite3": "^12.8.0",
+    "jsbarcode": "^3.12.3",
+    "lucide-react": "^1.0.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.2",
+    "tailwindcss": "^4.2.2",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.12"
+  }
+}
+
+
+

@@ -1,0 +1,933 @@
+ï¿½import { useState, useEffect, useRef } from 'react'
+import {
+  Save, Store, Receipt, Printer, Settings as SettingsIcon,
+  Database, Info, RefreshCw, AlertTriangle, Users, Lock,
+  Shield, Bell, Volume2, Search, Clock, Image as ImageIcon,
+  Barcode, Globe, Moon, Sun, CheckCircle, Loader2,
+  Upload, DownloadCloud, HardDrive, Code2, Phone, MapPin,
+  DollarSign, Percent, FileText, Eye, EyeOff, ChevronRight,
+  Zap, Calendar, User, Key, AlertCircle, Package,
+  MessageCircle, Mail
+} from 'lucide-react'
+
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// Tab Definitions
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+const TABS = [
+  { key: 'store',    label: 'ب�`ا� ات ا��&تجر',         icon: Store },
+  { key: 'print',   label: 'ا�ف��ات�`ر ��ا�طباعة',      icon: Receipt },
+  { key: 'system',  label: 'إعدادات ا�ï¿½ ظا�&',          icon: SettingsIcon },
+  { key: 'users',   label: 'ا��&ستخد�&�`�  ��ا�ص�اح�`ات',  icon: Users },
+  { key: 'closing', label: 'إ�فا� ا�ï¿½`ï¿½ï¿½ï¿½&',             icon: Lock },
+  { key: 'backup',  label: 'ا�ï¿½ سخ ا�احت�`اط�`',         icon: Database },
+  { key: 'about',   label: 'ع�  ا�بر� ا�&ج',             icon: Info },
+]
+
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// Reusable UI components
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+function SectionCard({ title, icon: Icon, iconColor = 'text-blue-700', children, accent }) {
+  return (
+    <div className={`bg-white rounded-2xl shadow-sm border ${accent ? accent : 'border-slate-100'} p-6`}>
+      <div className={`flex items-center gap-2.5 mb-5 ${iconColor}`}>
+        {Icon && <Icon size={20} />}
+        <h3 className="font-bold text-slate-800 text-base">{title}</h3>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function FieldLabel({ children }) {
+  return <label className="block text-sm font-semibold text-slate-500 mb-1.5">{children}</label>
+}
+
+function Input({ label, ...props }) {
+  return (
+    <div>
+      {label && <FieldLabel>{label}</FieldLabel>}
+      <input
+        {...props}
+        className="w-full border border-slate-200 bg-slate-50/60 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-700/30 focus:border-blue-600 transition placeholder-slate-300"
+      />
+    </div>
+  )
+}
+
+function Select({ label, children, ...props }) {
+  return (
+    <div>
+      {label && <FieldLabel>{label}</FieldLabel>}
+      <select
+        {...props}
+        className="w-full border border-slate-200 bg-slate-50/60 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-700/30 focus:border-blue-600 transition"
+      >
+        {children}
+      </select>
+    </div>
+  )
+}
+
+function Textarea({ label, ...props }) {
+  return (
+    <div>
+      {label && <FieldLabel>{label}</FieldLabel>}
+      <textarea
+        {...props}
+        className="w-full border border-slate-200 bg-slate-50/60 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-700/30 focus:border-blue-600 transition resize-none placeholder-slate-300"
+      />
+    </div>
+  )
+}
+
+function Toggle({ label, description, checked, onChange }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-50 last:border-0">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-slate-700 leading-tight">{label}</p>
+        {description && <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{description}</p>}
+      </div>
+      <button
+        onClick={() => onChange(!checked)}
+        className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none ${checked ? 'bg-blue-700' : 'bg-slate-200'}`}
+      >
+        <span
+          className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-all duration-300 ${checked ? 'right-0.5' : 'left-0.5'}`}
+        />
+      </button>
+    </div>
+  )
+}
+
+function SaveButton({ onClick, saving, saved, label = 'حفظ ا�إعدادات' }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={saving}
+      className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all duration-300 shadow-sm ${
+        saved
+          ? 'bg-emerald-600 text-white'
+          : saving
+          ? 'bg-blue-400 text-white cursor-wait'
+          : 'bg-blue-700 hover:bg-blue-800 text-white active:scale-95'
+      }`}
+    >
+      {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <CheckCircle size={16} /> : <Save size={16} />}
+      {saved ? 'ت�& ا�حفظ!' : saving ? 'جار�` ا�حفظ...' : label}
+    </button>
+  )
+}
+
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// Main Component
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+export default function SettingsPage({ user, onSettingsChange }) {
+  const [activeTab, setActiveTab] = useState('store')
+  const [settings, setSettings] = useState({
+    // store
+    store_name: '', store_phone: '', store_address: '',
+    currency: 'ج.�&', currency_symbol: 'ج.�&',
+    tax_rate: '0', tax_enabled: '0',
+    invoice_footer: 'شْرا�9 ï¿½ز�`ارتْ�&', store_logo: '',
+    // print
+    show_logo: '0', show_cashier_name: '1', show_tax: '0',
+    auto_print: '1', paper_size: '80mm', printer_name: '',
+    print_mode: 'silent', show_barcode: '1', barcode_type: 'CODE128',
+    // system
+    language: 'ar', date_format: 'DD/MM/YYYY',
+    dark_mode: '0', low_stock_alert: '1',
+    sale_sound: '1', auto_focus_search: '1', auto_save: '1',
+    // users/permissions
+    permissions_enabled: '1', prevent_delete_last_admin: '1',
+    protect_sensitive_ops: '1', auto_logout_minutes: '0',
+    // closing
+    day_closing_enabled: '1', cashier_can_close: '1',
+    prevent_reopen_by_cashier: '1', prevent_sale_after_close: '1',
+    cash_diff_limit: '10', alert_on_diff: '1',
+    // backup
+    auto_backup: '0',
+  })
+
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [printers, setPrinters] = useState([])
+  const [backupMsg, setBackupMsg] = useState({ text: '', type: '' })
+  const [showReset, setShowReset] = useState(false)
+  const [licenseInfo, setLicenseInfo] = useState(null)
+  const [lastBackup, setLastBackup] = useState(null)
+  const logoInputRef = useRef()
+
+  // helpers
+  const bool = (key) => settings[key] === '1'
+  const setB = (key, val) => set(key, val ? '1' : '0')
+  function set(key, val) {
+    setSettings(s => ({ ...s, [key]: val }))
+  }
+
+  async function loadAll() {
+    const data = await window.mgpos.db.getSettings()
+    if (data && typeof data === 'object') {
+      setSettings(prev => ({ ...prev, ...data }))
+    }
+    if (window.mgpos.getPrinters) {
+      const pr = await window.mgpos.getPrinters()
+      setPrinters(pr || [])
+    }
+    if (window.mgpos.license && window.mgpos.license.check) {
+      const lic = await window.mgpos.license.check()
+      setLicenseInfo(lic)
+    }
+  }
+
+  useEffect(() => {
+    if (user?.role === 'admin') loadAll()
+  }, [user])
+
+  if (user?.role !== 'admin') {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
+        <Shield size={48} className="opacity-30" />
+        <p className="font-bold text-lg">غ�`ر �&س�&��ح ï¿½ْ با���ص��� ï¿½�!ذ�! ا�صفحة</p>
+      </div>
+    )
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      for (const [key, value] of Object.entries(settings)) {
+        await window.mgpos.db.setSetting(key, String(value ?? ''))
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+      // Notify parent App to refresh settings globally
+      if (onSettingsChange) {
+        const fresh = await window.mgpos.db.getSettings()
+        if (fresh) onSettingsChange(fresh)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleBackup() {
+    const result = await window.mgpos.backup.create()
+    if (result?.success) {
+      setBackupMsg({ text: 'ت�& إ� شاء ا�ï¿½ سخة ا�احت�`اط�`ة ب� جاح ï¿½S', type: 'success' })
+      setLastBackup(new Date().toLocaleString('ar-EG'))
+    } else {
+      setBackupMsg({ text: 'ت�& ا�إ�غاء', type: 'warn' })
+    }
+    setTimeout(() => setBackupMsg({ text: '', type: '' }), 3500)
+  }
+
+  async function handleRestore() {
+    const result = await window.mgpos.backup.restore()
+    if (result?.success) {
+      alert('ت�& ا�است�`راد ب� جاح! س�`ت�& إعادة تشغ�`� ا�بر� ا�&ج ا�آ� .')
+      await window.mgpos.restart()
+    }
+  }
+
+  async function handleTestPrint() {
+    const testHTML = `
+      <div style="font-family:Arial;text-align:center;padding:20px;">
+        <h2>${settings.store_name || 'MG POS'}</h2>
+        <p>فات��رة تجر�`ب�`ة</p>
+        <hr style="border:1px dashed #000;margin:10px 0"/>
+        <p style="font-weight:bold;">اختبار ا�طباعة ï¿½S</p>
+      </div>`
+    try {
+      await window.mgpos.print(testHTML, {
+        printerName: settings.printer_name,
+        silent: settings.print_mode === 'silent',
+        copies: 1,
+      })
+    } catch {
+      alert('فش�ت ا�طباعة')
+    }
+  }
+
+  function handleLogoUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => set('store_logo', ev.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ TAB: Store ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  function StoreTab() {
+    return (
+      <div className="space-y-5">
+        <SectionCard title="شعار ا��&تجر" icon={ImageIcon}>
+          <div className="flex flex-col items-center gap-3 p-5 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 hover:border-blue-300 transition">
+            {settings.store_logo ? (
+              <img src={settings.store_logo} alt="شعار" className="w-24 h-24 object-contain rounded-xl border border-slate-100 bg-white shadow-sm" />
+            ) : (
+              <div className="w-24 h-24 bg-white rounded-xl flex items-center justify-center border border-slate-200 shadow-sm">
+                <ImageIcon size={36} className="text-slate-300" />
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => logoInputRef.current?.click()}
+                className="text-xs bg-white text-blue-700 font-bold px-4 py-2 rounded-lg border border-blue-200 hover:bg-blue-50 hover:border-blue-400 transition flex items-center gap-1.5"
+              >
+                <Upload size={13} /> رفع شعار
+              </button>
+              {settings.store_logo && (
+                <button
+                  onClick={() => set('store_logo', '')}
+                  className="text-xs bg-white text-red-500 font-bold px-4 py-2 rounded-lg border border-red-200 hover:bg-red-50 transition"
+                >
+                  حذف
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400">ص��رة �&ربعة بخ�ف�`ة ب�`ضاء (PNG/JPG)</p>
+            <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="ب�`ا� ات ا��&تجر" icon={Store}>
+          <div className="grid grid-cols-1 gap-4">
+            <Input label="اس�& ا��&تجر" value={settings.store_name} onChange={e => set('store_name', e.target.value)} placeholder="�&ثا�: س��بر �&ارْت ا��!د�0" />
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="ر��& ا��!اتف" value={settings.store_phone} onChange={e => set('store_phone', e.target.value)} placeholder="010xxxxxxxx" />
+              <Input label="ا�ع� ��ا� " value={settings.store_address} onChange={e => set('store_address', e.target.value)} placeholder="ا�شارع�R ا�ï¿½&ï¿½ ط�ة" />
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="ا�ع�&�ة ��ا�ضر�`بة" icon={DollarSign}>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <Select label="ا�ع�&�ة" value={settings.currency} onChange={e => {
+              const val = e.target.value
+              set('currency', val)
+              set('currency_symbol', val)
+            }}>
+              <option value="ج.�&">ج� ï¿½`ï¿½! �&صر�` (ج.�&)</option>
+              <option value="ر.س">ر�`ا� سع��د�` (ر.س)</option>
+              <option value="د.إ">در�!�& إ�&ارات�` (د.إ)</option>
+              <option value="د.ْ">د�`� ار ْ���`ت�` (د.ْ)</option>
+              <option value="د.أ">د�`� ار أرد� ï¿½` (د.أ)</option>
+              <option value="$">د���ار أ�&ر�`ْ�` ($)</option>
+              <option value="��">�`��ر�� (ï¿½ï¿½)</option>
+            </Select>
+            <Input label="ر�&ز ا�ع�&�ة" value={settings.currency_symbol} onChange={e => set('currency_symbol', e.target.value)} placeholder="ج.�&" />
+          </div>
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-100">
+            <Toggle
+              label="تفع�`� ا�ضر�`بة"
+              description="إضافة ضر�`بة ت��ائ�`ة ع�ï¿½0 ا�ف��ات�`ر"
+              checked={bool('tax_enabled')}
+              onChange={v => setB('tax_enabled', v)}
+            />
+            {bool('tax_enabled') && (
+              <div className="mt-3">
+                <Input
+                  label="ï¿½ سبة ا�ضر�`بة %"
+                  type="number"
+                  min="0" max="100" step="0.5"
+                  value={settings.tax_rate}
+                  onChange={e => set('tax_rate', e.target.value)}
+                  placeholder="14"
+                />
+              </div>
+            )}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="تذ�`�`� ا�فات��رة" icon={FileText}>
+          <Textarea
+            rows={3}
+            value={settings.invoice_footer}
+            onChange={e => set('invoice_footer', e.target.value)}
+            placeholder="شْرا�9 ï¿½ز�`ارتْ�&... ï¿½ ع�&� ع�ï¿½0 �&دار ا�ساعة"
+          />
+          <p className="text-xs text-slate-400 mt-2">�`ظ�!ر �!ذا ا�ï¿½ ص ف�` أسف� ْ� فات��رة �&طب��عة</p>
+        </SectionCard>
+
+        <SectionCard title="إعدادات ا�ص�اح�`ة ��ا�دفعات" icon={Calendar}>
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
+              <p className="text-xs font-bold text-blue-700 mb-1">ï¿½ ظا�& Batch / Lot</p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                �`�&ْ� ْ تفع�`� تتبع ت��ار�`خ ا�إ� تاج ��ا�ا� ت�!اء ï¿½ْ� ï¿½&ï¿½ تج ï¿½&ï¿½  خ�ا� صفحة ا�ï¿½&ï¿½ تجات ï¿½ ï¿½ زر "إدارة ا�دفعات".
+                ا�إعداد ï¿½!ï¿½ ا �`حدد عدد ا�أ�`ا�& ا�ت�` �`بدأ ف�`�!ا ا�ï¿½ ظا�& بإرسا� ت� ب�`�! �ب� ا� ت�!اء ا�ص�اح�`ة.
+              </p>
+            </div>
+            <Input
+              label="عدد أ�`ا�& ا�تحذ�`ر �ب� ا� ت�!اء ا�ص�اح�`ة"
+              type="number"
+              min="1"
+              max="90"
+              value={settings.expiry_alert_days || '7'}
+              onChange={e => set('expiry_alert_days', e.target.value)}
+              placeholder="7"
+            />
+            <p className="text-xs text-slate-400">
+              �&ثا�: ï¿½ï¿½ï¿½ ْتبت 7 ï¿½ س�`ظ�!ر تحذ�`ر ï¿½أ�` دفعة ست� ت�!�` ص�اح�`ت�!ا خ�ا� 7 أ�`ا�& أ�� أ��.
+            </p>
+          </div>
+        </SectionCard>
+      </div>
+    )
+  }
+
+
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ TAB: Print ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  function PrintTab() {
+    return (
+      <div className="space-y-5">
+        <SectionCard title="خ�`ارات عرض ا�فات��رة" icon={Eye}>
+          <div className="space-y-1">
+            <Toggle label="عرض شعار ا��&تجر" description="طباعة ا�شعار ف�` أع�ï¿½0 ا�فات��رة" checked={bool('show_logo')} onChange={v => setB('show_logo', v)} />
+            <Toggle label="عرض اس�& ا�ْاش�`ر" description="اس�& ا��&��ظف ا�ذ�` أجر�0 ا�ع�&��`ة" checked={bool('show_cashier_name')} onChange={v => setB('show_cashier_name', v)} />
+            <Toggle label="عرض ا�ضر�`بة" description="إظ�!ار ��`�&ة ا�ضر�`بة ف�` ا�فات��رة (إ�  ْا� ت �&فع�ة)" checked={bool('show_tax')} onChange={v => setB('show_tax', v)} />
+            <Toggle label="طباعة ت��ائ�`ة بعد ا�ب�`ع" description="إرسا� ا�فات��رة ï¿½ï¿½طابعة ف��ر إت�&ا�& ا�ب�`ع بد���  ï¿½ افذة تأْ�`د" checked={bool('auto_print')} onChange={v => setB('auto_print', v)} />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="إعدادات ا�طابعة" icon={Printer}>
+          <div className="space-y-4">
+            <div>
+              <FieldLabel>ï¿½ ��ع ا���ر�</FieldLabel>
+              <div className="grid grid-cols-3 gap-3">
+                {[['58mm', 'حرار�`ة صغ�`رة'], ['80mm', 'حرار�`ة ْب�`رة'], ['A4', 'A4']].map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    onClick={() => set('paper_size', val)}
+                    className={`py-4 rounded-xl border-2 text-center text-sm font-bold transition ${settings.paper_size === val ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-400 hover:border-blue-300'}`}
+                  >
+                    <div className="text-lg mb-1">{val}</div>
+                    <div className="text-xs font-normal opacity-70">{lbl}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <FieldLabel>ا�طابعة</FieldLabel>
+                <div className="flex gap-2">
+                  <select
+                    value={settings.printer_name}
+                    onChange={e => set('printer_name', e.target.value)}
+                    className="flex-1 border border-slate-200 bg-slate-50/60 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700/30 focus:border-blue-600 transition"
+                  >
+                    <option value="">ا�طابعة ا�افتراض�`ة</option>
+                    {printers.map((p, i) => (
+                      <option key={i} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                  <button onClick={() => window.mgpos.getPrinters?.().then(pr => setPrinters(pr || []))} className="border border-slate-200 rounded-xl px-3 py-2.5 text-slate-500 hover:bg-slate-50 transition" title="تحد�`ث">
+                    <RefreshCw size={15} />
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <FieldLabel>��ضع ا�طباعة</FieldLabel>
+                <select
+                  value={settings.print_mode}
+                  onChange={e => set('print_mode', e.target.value)}
+                  className="w-full border border-slate-200 bg-slate-50/60 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700/30 focus:border-blue-600 transition"
+                >
+                  <option value="silent">Silent (�&باشر)</option>
+                  <option value="dialog">Dialog (ï¿½ افذة)</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={handleTestPrint}
+              className="w-full border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2"
+            >
+              <Printer size={15} /> اختبار ا�طباعة
+            </button>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="إعدادات ا�بارْ��د" icon={Barcode}>
+          <Toggle label="إظ�!ار ا�بارْ��د ف�` ا�فات��رة" description="طباعة بارْ��د ا�ï¿½&ï¿½ تج ع�ï¿½0 ْ� فات��رة" checked={bool('show_barcode')} onChange={v => setB('show_barcode', v)} />
+          {bool('show_barcode') && (
+            <div className="mt-4">
+              <Select label="ï¿½ ��ع ا�بارْ��د" value={settings.barcode_type} onChange={e => set('barcode_type', e.target.value)}>
+                <option value="CODE128">CODE128 (ا�أْثر ش�`��عا�9)</option>
+                <option value="CODE39">CODE39</option>
+                <option value="EAN13">EAN-13</option>
+                <option value="QR">QR Code</option>
+              </Select>
+            </div>
+          )}
+        </SectionCard>
+      </div>
+    )
+  }
+
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ TAB: System ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  function SystemTab() {
+    return (
+      <div className="space-y-5">
+        <SectionCard title="ا�ï¿½غة ��ا�تار�`خ" icon={Globe}>
+          <div className="grid grid-cols-2 gap-4">
+            <Select label="ï¿½غة ا���اج�!ة" value={settings.language} onChange={e => set('language', e.target.value)}>
+              <option value="ar">ا�عرب�`ة</option>
+              <option value="en">English</option>
+            </Select>
+            <Select label="ص�`غة ا�تار�`خ" value={settings.date_format} onChange={e => set('date_format', e.target.value)}>
+              <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+              <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+            </Select>
+          </div>
+          {settings.language !== 'ar' && (
+            <div className="mt-3 flex items-center gap-2 text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5 text-xs font-semibold">
+              <AlertCircle size={14} />
+              تغ�`�`ر ا�ï¿½غة �`تط�ب إعادة تشغ�`� ا�بر� ا�&ج
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard title="ا�ت� ب�`�!ات ��ا�ص��ت" icon={Bell}>
+          <div className="space-y-1">
+            <Toggle label="ت� ب�`�! ï¿½ �ص ا��&خز��� " description="إشعار ع� د ��ص��� ا�ï¿½&ï¿½ تج ï¿½أ�� ï¿½&ï¿½  ا�حد ا�أد� ï¿½0" checked={bool('low_stock_alert')} onChange={v => setB('low_stock_alert', v)} />
+            <Toggle label="ص��ت ع� د ا�ب�`ع" description="تشغ�`� ص��ت تأْ�`د بعد إت�&ا�& ْ� ع�&��`ة ب�`ع" checked={bool('sale_sound')} onChange={v => setB('sale_sound', v)} />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="تجربة ا�استخدا�&" icon={Zap}>
+          <div className="space-y-1">
+            <Toggle label="ترْ�`ز ت��ائ�` ع�ï¿½0 ا�بحث" description="ا� ت�ا� ا��&ؤشر ï¿½ح�� ا�بحث ت��ائ�`ا�9 ع� د فتح صفحة ا�ْاش�`ر" checked={bool('auto_focus_search')} onChange={v => setB('auto_focus_search', v)} />
+            <Toggle label="ا�حفظ ا�ت��ائ�`" description="حفظ ا�ب�`ا� ات ت��ائ�`ا�9 أث� اء ا�ع�&�" checked={bool('auto_save')} onChange={v => setB('auto_save', v)} />
+          </div>
+        </SectionCard>
+      </div>
+    )
+  }
+
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ TAB: Users ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  function UsersTab() {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-100 rounded-2xl text-sm text-blue-700">
+          <Info size={16} className="mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-bold mb-0.5">إعدادات عا�&ة ï¿½ï¿½ص�اح�`ات</p>
+            <p className="text-xs text-blue-600 leading-relaxed">�!ذ�! ا�إعدادات تحْ�& ا�س���ْ ا�عا�& ï¿½ï¿½ ظا�& ا�ص�اح�`ات ï¿½ï¿½ï¿½�`س إدارة ا��&ستخد�&�`� . ï¿½إدارة ا��&ستخد�&�`�  اضغط ع�ï¿½0 "ا��&ستخد�&�`� " ف�` ا��ائ�&ة ا�جا� ب�`ة.</p>
+          </div>
+        </div>
+
+        <SectionCard title="ï¿½ ظا�& ا�ص�اح�`ات" icon={Shield} iconColor="text-purple-600">
+          <div className="space-y-1">
+            <Toggle label="تفع�`� ï¿½ ظا�& ا�ص�اح�`ات" description="تطب�`� ��`��د ا���ص��� حسب د��ر ا��&ستخد�& (أد�&�  / ْاش�`ر)" checked={bool('permissions_enabled')} onChange={v => setB('permissions_enabled', v)} />
+            <Toggle label="ï¿½&ï¿½ ع حذف آخر أد�&� " description="ح�&ا�`ة ا�ï¿½ ظا�& ï¿½&ï¿½  ف�دا�  ص�اح�`ات ا�إدارة" checked={bool('prevent_delete_last_admin')} onChange={v => setB('prevent_delete_last_admin', v)} />
+            <Toggle label="ح�&ا�`ة ا�ع�&��`ات ا�حساسة" description="ط�ب تأْ�`د إضاف�` �ب� ا�حذف أ�� ا�تعد�`� ا�ج���!ر�`" checked={bool('protect_sensitive_ops')} onChange={v => setB('protect_sensitive_ops', v)} />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="ا�خر��ج ا�ت��ائ�`" icon={Clock} iconColor="text-orange-500">
+          <Toggle label="تفع�`� ا�خر��ج ا�ت��ائ�`" description="تسج�`� خر��ج ا��&ستخد�& بعد فترة ï¿½&ï¿½  عد�& ا�ï¿½ شاط" checked={settings.auto_logout_minutes !== '0'} onChange={v => set('auto_logout_minutes', v ? '30' : '0')} />
+          {settings.auto_logout_minutes !== '0' && (
+            <div className="mt-4">
+              <FieldLabel>�&دة ا� تظار ا�خر��ج (با�د�ائ�)</FieldLabel>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="5" max="120" step="5"
+                  value={settings.auto_logout_minutes}
+                  onChange={e => set('auto_logout_minutes', e.target.value)}
+                  className="flex-1 accent-blue-700"
+                />
+                <span className="text-sm font-bold text-blue-700 w-14 text-center bg-blue-50 py-1.5 rounded-lg">{settings.auto_logout_minutes} د��`�ة</span>
+              </div>
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard title="ï¿½&ï¿½احظة ح��� ا�أد��ار" icon={User} iconColor="text-slate-500">
+          <div className="space-y-3">
+            {[
+              { role: 'أد�&� ', color: 'bg-blue-100 text-blue-700 border-blue-200', perms: ['ْ� ص�اح�`ات ا�ï¿½ ظا�&', 'ا�إعدادات ��ا�ت�ار�`ر', 'إدارة ا��&ستخد�&�`� ', 'ا�حذف ��ا�تعد�`�', 'فتح ��إغ�ا� ا�ï¿½`ï¿½ï¿½ï¿½&'] },
+              { role: 'ْاش�`ر', color: 'bg-slate-100 text-slate-600 border-slate-200', perms: ['ع�&��`ات ا�ب�`ع', 'عرض ا�ï¿½&ï¿½ تجات', 'عرض ا�ع�&�اء', 'إ�فا� ا�ï¿½`ï¿½ï¿½ï¿½& (إ�  سُ�&ح)'] },
+            ].map(({ role, color, perms }) => (
+              <div key={role} className={`rounded-xl border px-4 py-3 ${color}`}>
+                <p className="font-bold text-sm mb-2">{role}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {perms.map(p => (
+                    <span key={p} className="text-xs bg-white/70 rounded-lg px-2 py-0.5 font-medium">{p}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </div>
+    )
+  }
+
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ TAB: Closing ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  function ClosingTab() {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-100 rounded-2xl text-sm text-amber-700">
+          <Lock size={16} className="mt-0.5 flex-shrink-0" />
+          <p className="text-xs leading-relaxed font-semibold">إعدادات إ�فا� ا�ï¿½`ï¿½ï¿½ï¿½& تؤثر ع�ï¿½0 س�`ر ا�ع�&� ا�ï¿½`ï¿½ï¿½ï¿½&ï¿½` با�ْا�&�. تأْد ï¿½&ï¿½  �&راجعت�!ا بع� ا�`ة �ب� ا�تغ�`�`ر.</p>
+        </div>
+
+        <SectionCard title="تفع�`� إ�فا� ا�ï¿½`ï¿½ï¿½ï¿½&" icon={Lock} iconColor="text-amber-600" accent="border-amber-100">
+          <Toggle
+            label="تفع�`� ï¿½ ظا�& إ�فا� ا�ï¿½`ï¿½ï¿½ï¿½&"
+            description="ت�&ْ�`�  �&�`زة ا�إ�فا� ا�ï¿½`ï¿½ï¿½ï¿½&ï¿½` ï¿½تتبع ��تس���`ة ا��&ب�`عات"
+            checked={bool('day_closing_enabled')}
+            onChange={v => setB('day_closing_enabled', v)}
+          />
+        </SectionCard>
+
+        {bool('day_closing_enabled') && (
+          <>
+            <SectionCard title="ص�اح�`ات ا�إ�فا�" icon={Shield} iconColor="text-blue-600">
+              <div className="space-y-1">
+                <Toggle label="ا�س�&اح ï¿½ï¿½ْاش�`ر بإ�فا� ا�ï¿½`ï¿½ï¿½ï¿½&" description="�`�&ْ�  ï¿½ï¿½ْاش�`ر إ�فا� ا�ï¿½`ï¿½ï¿½ï¿½& بد���  تدخ� ا�أد�&� " checked={bool('cashier_can_close')} onChange={v => setB('cashier_can_close', v)} />
+                <Toggle label="ï¿½&ï¿½ ع إعادة فتح ا�ï¿½`ï¿½ï¿½ï¿½& إ�ا ï¿½ï¿½أد�&� " description="ا�ْاش�`ر ï¿½ا �`ستط�`ع إعادة فتح ï¿½`ï¿½ï¿½ï¿½& �&ُ�ف�" checked={bool('prevent_reopen_by_cashier')} onChange={v => setB('prevent_reopen_by_cashier', v)} />
+                <Toggle label="ï¿½&ï¿½ ع ا�ب�`ع بعد ا�إ�فا�" description="ï¿½ا �`�&ْ�  إت�&ا�& أ�` فات��رة بعد إ�فا� ا�ï¿½`ï¿½ï¿½ï¿½&" checked={bool('prevent_sale_after_close')} onChange={v => setB('prevent_sale_after_close', v)} />
+              </div>
+            </SectionCard>
+
+            <SectionCard title="إعدادات ا�ْاش ��ا�فر���ات" icon={DollarSign} iconColor="text-emerald-600">
+              <Toggle label="ت� ب�`�! ع� د ��ج��د فر� ف�` ا�ْاش" description="إشعار ع� د اخت�اف ا�ْاش ا�فع�ï¿½` ع�  ا��&ت���ع" checked={bool('alert_on_diff')} onChange={v => setB('alert_on_diff', v)} />
+              {bool('alert_on_diff') && (
+                <div className="mt-4">
+                  <FieldLabel>حد ا�فر� ا��&س�&��ح ب�! (با�ع�&�ة)</FieldLabel>
+                  <div className="flex items-center gap-3 mt-1">
+                    <input
+                      type="range"
+                      min="0" max="500" step="10"
+                      value={settings.cash_diff_limit}
+                      onChange={e => set('cash_diff_limit', e.target.value)}
+                      className="flex-1 accent-emerald-600"
+                    />
+                    <span className="text-sm font-bold text-emerald-700 w-24 text-center bg-emerald-50 py-1.5 rounded-lg">{settings.cash_diff_limit} {settings.currency}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">ا�فر��� أ�� ï¿½&ï¿½  �!ذا ا��&ب�غ ï¿½ï¿½  تُعا�&� ْت� ب�`�!</p>
+                </div>
+              )}
+            </SectionCard>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ TAB: Backup ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  function BackupTab() {
+    return (
+      <div className="space-y-5">
+        <SectionCard title="ا�ï¿½ سخ ا�احت�`اط�`" icon={HardDrive} iconColor="text-blue-600">
+          {lastBackup && (
+            <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-xl px-4 py-2.5 mb-4 border border-slate-100">
+              <Clock size={12} />
+              آخر ï¿½ سخة احت�`اط�`ة: <span className="font-bold text-slate-700">{lastBackup}</span>
+            </div>
+          )}
+          <div className="space-y-3">
+            <button
+              onClick={handleBackup}
+              className="w-full flex items-center justify-center gap-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold py-3.5 rounded-xl transition text-sm active:scale-95"
+            >
+              <DownloadCloud size={18} /> إ� شاء ï¿½ سخة احت�`اط�`ة
+            </button>
+            <button
+              onClick={handleRestore}
+              className="w-full flex items-center justify-center gap-2.5 border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-600 font-semibold py-3.5 rounded-xl transition text-sm"
+            >
+              <Upload size={18} /> است�`راد ï¿½ سخة احت�`اط�`ة
+            </button>
+            {backupMsg.text && (
+              <div className={`text-center text-sm font-bold py-2 rounded-xl ${backupMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-500'}`}>
+                {backupMsg.text}
+              </div>
+            )}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="ï¿½ سخ احت�`اط�` ت��ائ�`" icon={RefreshCw} iconColor="text-indigo-600">
+          <Toggle
+            label="تفع�`� ا�ï¿½ سخ ا�احت�`اط�` ا�ت��ائ�`"
+            description="إ� شاء ï¿½ سخة احت�`اط�`ة ت��ائ�`ا�9 ع� د إ�فا� ا�ï¿½`ï¿½ï¿½ï¿½&"
+            checked={bool('auto_backup')}
+            onChange={v => setB('auto_backup', v)}
+          />
+        </SectionCard>
+
+        <SectionCard title="إعادة ضبط ا�ï¿½ ظا�&" icon={AlertTriangle} iconColor="text-red-500" accent="border-red-100">
+          {!showReset ? (
+            <button
+              onClick={() => setShowReset(true)}
+              className="w-full border-2 border-red-200 text-red-600 hover:bg-red-50 font-bold py-3.5 rounded-xl transition text-sm flex items-center justify-center gap-2"
+            >
+              <AlertTriangle size={16} /> إعادة ضبط ا��&ص� ع (Factory Reset)
+            </button>
+          ) : (
+            <div className="bg-red-50 rounded-2xl p-5 border border-red-100 space-y-4">
+              <div className="flex items-start gap-2 text-red-600">
+                <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+                <p className="text-sm font-bold leading-relaxed">
+                  تحذ�`ر! س�`ت�& حذف ج�&�`ع ا�ب�`ا� ات (ا�ف��ات�`ر�R ا�ï¿½&ï¿½ تجات�R ا�ع�&�اء) بشْ� ï¿½ �!ائ�` ï¿½ï¿½ï¿½ا �`�&ْ�  ا�تراجع ع�  �!ذ�! ا�ع�&��`ة.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={async () => { 
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    await window.mgpos.db.resetSystem(); 
+                    await window.mgpos.restart(); 
+                  }}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl transition text-sm"
+                >
+                  تأْ�`د ا�حذف ا�ï¿½ �!ائ�`
+                </button>
+                <button
+                  onClick={() => setShowReset(false)}
+                  className="flex-1 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold py-2.5 rounded-xl transition text-sm"
+                >
+                  إ�غاء
+                </button>
+              </div>
+            </div>
+          )}
+        </SectionCard>
+      </div>
+    )
+  }
+
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ TAB: About ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  function AboutTab() {
+    return (
+      <div className="space-y-5 pb-10">
+        
+        {/* 1) ْارت ا�تعر�`ف ا�رئ�`س�` */}
+        <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-2xl p-8 text-white text-center shadow-lg">
+          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Package size={32} className="text-white" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2">MG POS</h2>
+          <p className="text-blue-200 text-sm mb-6">ï¿½ ظا�& ï¿½ �اط ب�`ع ذْ�` ï¿½إدارة ا��&تاجر ï¿½ï¿½ï¿½ �اط ا�ب�`ع بسرعة ��د�ة ��أ�&ا� </p>
+          <div className="inline-flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2 text-sm font-semibold">
+            <Code2 size={14} />
+            ا�إصدار {window.mgpos?.version || '2.2.2'}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-5">
+          {/* 2) ْارت �&ع����&ات ا��&ط��ر */}
+          <SectionCard title="�&ع����&ات ا�ï¿½ ظا�&" icon={User} iconColor="text-blue-600">
+            <div className="space-y-2 text-sm border-t border-slate-100 pt-3">
+              {[
+                ['ا��&ط��ر', 'MG'],
+                ['ï¿½ ��ع ا�ï¿½ ظا�&', 'Desktop POS System'],
+                ['ا�إصدار', window.mgpos?.version || '2.2.2'],
+                ['ا�ï¿½غة', 'ا�عرب�`ة'],
+                ['��ضع ا�تشغ�`�', 'Offline'],
+                ['ا�ترخ�`ص', '�&رخص ï¿½ج�!از ��احد'],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between items-center py-2 border-b border-slate-50 last:border-0">
+                  <span className="text-slate-500">{k}</span>
+                  <span className="font-semibold text-slate-700 text-left">{v}</span>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
+          {/* 3) ْارت ا�دع�& ا�ف� ï¿½` */}
+          <SectionCard title="ا�دع�& ا�ف� ï¿½`" icon={Phone} iconColor="text-emerald-600">
+            <div className="space-y-2 text-sm border-t border-slate-100 pt-3">
+              {[
+                ['ا�بر�`د ا�إ�ْتر��� ï¿½`', 'mgiviacompany@gmail.com'],
+                ['��اتساب', '01152520844'],
+                ['ساعات ا�دع�&', '�`���&�`�9ا ï¿½&ï¿½  9 ص إ�ï¿½0 9 ï¿½&'],
+                ['ï¿½ ��ع ا�دع�&', 'ف� ï¿½` - تحد�`ثات - تفع�`�'],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between items-center py-2 border-b border-slate-50 last:border-0">
+                  <span className="text-slate-500 whitespace-nowrap ml-2">{k}</span>
+                  <span className="font-semibold text-slate-700 text-left text-xs sm:text-sm">{v}</span>
+                </div>
+              ))}
+            </div>
+            
+            {/* Action Buttons (CTA) */}
+            <div className="flex gap-2.5 mt-2 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => window.open('https://wa.me/201152520844', '_blank')}
+                className="flex-1 flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm"
+              >
+                <MessageCircle size={16} />
+                ��اتساب
+              </button>
+              <button
+                onClick={() => window.open('mailto:mgiviacompany@gmail.com', '_blank')}
+                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm"
+              >
+                <Mail size={16} />
+                �&راس�ة ا�دع�&
+              </button>
+            </div>
+          </SectionCard>
+        </div>
+
+        {/* 4) ْارت �&ع����&ات ا�ترخ�`ص */}
+        <SectionCard title="�&ع����&ات ا�ترخ�`ص" icon={Key} iconColor="text-amber-600">
+          <div className="text-sm border-t border-slate-100 pt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                <span className="text-slate-500">حا�ة ا�ترخ�`ص</span>
+                <span className={`font-bold px-2 py-0.5 rounded-lg text-xs ${
+                  licenseInfo?.valid 
+                    ? (licenseInfo?.trial ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700')
+                    : 'bg-red-100 text-red-700'
+                }`}>
+                  {licenseInfo?.valid 
+                    ? (licenseInfo?.trial ? 'ï¿½ سخة تجر�`ب�`ة' : '�&فع�') 
+                    : 'غ�`ر �&فع� / ï¿½&ï¿½ ت�!�`'}
+                </span>
+              </div>
+              
+              {licenseInfo?.trial ? (
+                <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                  <span className="text-slate-500">ا�أ�`ا�& ا��&تب��`ة</span>
+                  <span className="font-bold text-slate-700">{licenseInfo?.daysLeft || 0} أ�`ا�&</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                    <span className="text-slate-500">ï¿½ ��ع ا�ترخ�`ص</span>
+                    <span className="font-bold text-slate-700">{licenseInfo?.lifetime ? '�&د�0 ا�ح�`اة' : '�&ؤ�ت'}</span>
+                  </div>
+                  {licenseInfo?.expiry && licenseInfo.expiry !== 'lifetime' && (
+                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                      <span className="text-slate-500">ï¿½`ï¿½ ت�!�` ف�`</span>
+                      <span className="font-bold text-slate-700">{licenseInfo.expiry}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              
+              <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                <span className="text-slate-500">ا�ج�!از ا�حا�ï¿½`</span>
+                <span className="font-bold text-slate-700">�&رخص</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                <span className="text-slate-500">ْ��د ا�ج�!از</span>
+                <span className="font-mono text-xs font-bold text-slate-700 select-all bg-slate-100 px-2 py-1 rounded">
+                   {licenseInfo?.machineId ? licenseInfo.machineId.substring(0, 10) + '...' : 'غ�`ر �&ت��فر'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+
+        {/* 5) ْارت �&�&�`زات ا�ï¿½ ظا�& */}
+        <SectionCard title="�&�&�`زات ا�ï¿½ ظا�&" icon={CheckCircle} iconColor="text-blue-500">
+           <div className="grid grid-cols-2 gap-y-3 gap-x-6 text-sm text-slate-600 border-t border-slate-100 pt-4 mt-2">
+             {[
+               'إدارة ا��&ب�`عات ��ا�ف��ات�`ر', 'إدارة ا�ï¿½&ï¿½ تجات ��ا�فئات',
+               '�&تابعة ا��&خز���  ��ا�ت� ب�`�!ات', 'إدارة ا�ع�&�اء ��ا�د�`��� ',
+               'إدارة ا��&��رد�`� ', 'ا��&صر��فات ��ا��&رتجعات',
+               'ت�ار�`ر �`���&�`ة ��ش�!ر�`ة', 'إ�فا� ï¿½`ï¿½ï¿½ï¿½&ï¿½` ��سج� ï¿½ï¿½حرْة',
+               'ï¿½ سخ احت�`اط�` ��استعادة', 'دع�& ا�طباعة ��ا�ف��ات�`ر'
+             ].map((feat, i) => (
+               <div key={i} className="flex items-center gap-2">
+                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                 <span className="font-medium text-xs sm:text-sm">{feat}</span>
+               </div>
+             ))}
+           </div>
+        </SectionCard>
+
+        {/* 6) ْارت ا�ï¿½&ï¿½احظات */}
+        <div className="bg-amber-50 rounded-2xl p-6 border border-amber-200 shadow-sm mt-4">
+          <div className="flex items-center gap-2 mb-3 text-amber-700 font-bold">
+            <AlertCircle size={18} />
+            <h4>ï¿½&ï¿½احظات �&�!�&ة</h4>
+          </div>
+          <ul className="list-disc list-inside text-xs text-amber-800/80 space-y-2 leading-relaxed font-medium">
+            <li>�!ذا ا�ï¿½ ظا�& �&خصص ï¿½ï¿½استخدا�& ا�تجار�` ا�داخ�ï¿½`.</li>
+            <li>ï¿½`ï¿½&ï¿½ ع ا�ï¿½ سخ أ�� إعادة ا�ت��ز�`ع بد���  إذ� .</li>
+            <li>�`��ص�0 بإ� شاء ï¿½ سخة احت�`اط�`ة بشْ� د��ر�` ï¿½ï¿½ب�`ا� ات ا��!ا�&ة.</li>
+            <li>ا�تحد�`ثات ��ا�ص�`ا� ة تت�& ï¿½&ï¿½  خ�ا� ا��&ط��ر ف�ط.</li>
+          </ul>
+        </div>
+      </div>
+    )
+  }
+
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Render ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  const tabComponents = {
+    store:   StoreTab(),
+    print:   PrintTab(),
+    system:  SystemTab(),
+    users:   UsersTab(),
+    closing: ClosingTab(),
+    backup:  BackupTab(),
+    about:   AboutTab(),
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-slate-100" dir="rtl">
+      {/* ï¿½ï¿½ï¿½ï¿½ Page Header ï¿½ï¿½ï¿½ï¿½ */}
+      <div className="bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between flex-shrink-0 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-700 flex items-center justify-center shadow-sm">
+            <SettingsIcon size={18} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-slate-800 leading-tight">إعدادات ا�ï¿½ ظا�&</h1>
+            <p className="text-xs text-slate-400">تخص�`ص ��إدارة إعدادات MG POS</p>
+          </div>
+        </div>
+        <SaveButton onClick={handleSave} saving={saving} saved={saved} />
+      </div>
+
+      {/* ï¿½ï¿½ï¿½ï¿½ Tabs Bar ï¿½ï¿½ï¿½ï¿½ */}
+      <div className="bg-white border-b border-slate-100 px-6 flex-shrink-0">
+        <div className="flex gap-1 overflow-x-auto pb-0 scrollbar-hide">
+          {TABS.map(tab => {
+            const Icon = tab.icon
+            const active = activeTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center gap-2 px-4 py-3.5 text-sm font-semibold border-b-2 transition whitespace-nowrap flex-shrink-0 ${
+                  active
+                    ? 'border-blue-700 text-blue-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-200'
+                }`}
+              >
+                <Icon size={15} />
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ï¿½ï¿½ï¿½ï¿½ Content ï¿½ï¿½ï¿½ï¿½ */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-2xl mx-auto">
+          {tabComponents[activeTab]}
+
+          {/* Save Footer (not on about tab) */}
+          {activeTab !== 'about' && (
+            <div className="mt-6 flex justify-end">
+              <SaveButton onClick={handleSave} saving={saving} saved={saved} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

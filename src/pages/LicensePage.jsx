@@ -12,6 +12,8 @@ import {
   Upload,
   XCircle,
 } from 'lucide-react'
+import { getCurrentLanguage, translateText } from '../i18n'
+import logoImg from '../assets/logo'
 
 export default function LicensePage({ onActivated }) {
   const [machineId, setMachineId] = useState('')
@@ -23,89 +25,130 @@ export default function LicensePage({ onActivated }) {
   const [activating, setActivating] = useState(false)
   const [copied, setCopied] = useState(false)
   const fileRef = useRef(null)
+  const mountedRef = useRef(false)
+  const checkSeq = useRef(0)
+  const activatingRef = useRef(false)
+  const activationTimer = useRef(null)
+  const copyTimer = useRef(null)
 
   useEffect(() => {
+    mountedRef.current = true
     checkLicense()
+    return () => {
+      mountedRef.current = false
+      checkSeq.current += 1
+      clearTimeout(activationTimer.current)
+      clearTimeout(copyTimer.current)
+    }
   }, [])
 
   async function checkLicense() {
+    const seq = ++checkSeq.current
+    const current = () => mountedRef.current && seq === checkSeq.current
     setLoading(true)
 
     try {
-      const mid = await window.mgpos.license.getMachineId()
+      const mid = await window.mgpos?.license?.getMachineId?.()
+      if (!current()) return
       setMachineId(mid || '')
     } catch (e) {
       console.error('Failed to get machine ID:', e)
+      if (current()) setError('تعذر الحصول على كود الجهاز. يرجى إعادة المحاولة.')
     }
 
+    if (!current()) return
     try {
+      if (!window.mgpos?.license?.check) {
+        setStatus('service_error')
+        return
+      }
       const result = await window.mgpos.license.check()
+      if (!current()) return
 
-      if (result.valid) {
+      if (result?.valid) {
         if (result.trial) {
           setStatus('trial')
           setDaysLeft(result.daysLeft || 0)
         } else {
           setStatus('licensed')
         }
-        onActivated()
+        onActivated?.()
       } else {
-        if (result.reason === 'TRIAL_EXPIRED') {
+        if (result?.reason === 'TRIAL_EXPIRED') {
           setStatus('trial_expired')
           setDaysLeft(0)
-        } else if (result.reason === 'WRONG_DEVICE') {
+        } else if (result?.reason === 'WRONG_DEVICE') {
           setStatus('wrong_device')
-        } else if (result.reason === 'INVALID_SIGNATURE') {
+        } else if (['INVALID_SIGNATURE', 'INVALID_FORMAT', 'INVALID_PAYLOAD', 'UNKNOWN_KEY', 'LEGACY_FORMAT'].includes(result?.reason)) {
           setStatus('invalid')
-        } else if (result.reason === 'EXPIRED') {
+        } else if (result?.reason === 'EXPIRED') {
           setStatus('expired')
+        } else if (result?.reason === 'CLOCK_ROLLBACK_DETECTED') {
+          setStatus('clock_rollback')
         } else {
-          setStatus('trial_expired')
+          setStatus('service_error')
         }
       }
     } catch (e) {
-      setStatus('trial_expired')
+      if (current()) setStatus('service_error')
       console.error(e)
     } finally {
-      setLoading(false)
+      if (current()) setLoading(false)
     }
   }
 
   async function handleFileUpload(e) {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file || activatingRef.current || activationTimer.current) return
+    activatingRef.current = true
+    checkSeq.current += 1
 
     setError('')
     setSuccess('')
     setActivating(true)
 
     try {
-      const text = await file.text()
-      const licenseData = JSON.parse(text)
+      if (!file.name.toLowerCase().endsWith('.nexalic') || file.size > 16 * 1024 || file.size === 0) {
+        setError('ملف الترخيص غير صالح أو حجمه أكبر من المسموح.')
+        return
+      }
+      const licenseToken = (await file.text()).trim()
+      if (!mountedRef.current) return
 
-      if (!licenseData.machineId || !licenseData.expiry || !licenseData.signature) {
+      if (!licenseToken.startsWith('NXL2.')) {
         setError('ملف الترخيص غير صالح. تأكد من اختيار ملف صحيح.')
         setActivating(false)
         return
       }
 
-      const result = await window.mgpos.license.activate(licenseData)
+      if (!window.mgpos?.license?.activate) {
+        throw new Error('خدمة تفعيل الترخيص غير متوفرة في هذه البيئة.')
+      }
 
-      if (result.valid) {
+      const result = await window.mgpos.license.activate(licenseToken)
+      if (!mountedRef.current) return
+
+      if (result?.valid) {
         setStatus('licensed')
         setSuccess('تم تفعيل الترخيص بنجاح. جاري فتح النظام...')
-        setTimeout(() => onActivated(), 1200)
-      } else if (result.reason === 'WRONG_DEVICE') {
+        activationTimer.current = setTimeout(() => { if (mountedRef.current) onActivated?.() }, 1200)
+      } else if (result?.reason === 'WRONG_DEVICE') {
         setError('هذا الترخيص مخصص لجهاز آخر.')
-      } else if (result.reason === 'INVALID_SIGNATURE') {
+      } else if (result?.reason === 'INVALID_SIGNATURE') {
         setError('ملف الترخيص تالف أو غير موثوق.')
+      } else if (result?.reason === 'SAVE_FAILED') {
+        setError('تعذر حفظ الترخيص. تحقق من صلاحيات الكتابة وحاول مرة أخرى.')
+      } else if (result?.reason === 'CLOCK_ROLLBACK_DETECTED') {
+        setError('تم اكتشاف تراجع في ساعة النظام. يرجى ضبط تاريخ ووقت الجهاز بشكل صحيح.')
       } else {
         setError('فشل التفعيل. ملف الترخيص غير صالح.')
       }
-    } catch {
-      setError('الملف غير صالح. يجب أن يكون بصيغة JSON.')
+    } catch (e) {
+      console.error('License activation failed:', e)
+      if (mountedRef.current) setError('تعذر تفعيل الترخيص. حاول مرة أخرى.')
     } finally {
-      setActivating(false)
+      activatingRef.current = false
+      if (mountedRef.current) setActivating(false)
       if (fileRef.current) fileRef.current.value = ''
     }
   }
@@ -114,9 +157,14 @@ export default function LicensePage({ onActivated }) {
     if (!machineId) return
     try {
       await navigator.clipboard.writeText(machineId)
+      if (!mountedRef.current) return
       setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
-    } catch {}
+      clearTimeout(copyTimer.current)
+      copyTimer.current = setTimeout(() => { if (mountedRef.current) setCopied(false) }, 1800)
+    } catch (e) {
+      console.error('Failed to copy machine ID:', e)
+      if (mountedRef.current) setError('تعذر نسخ كود الجهاز. يرجى نسخه يدويًا.')
+    }
   }
 
   if (loading) {
@@ -131,6 +179,13 @@ export default function LicensePage({ onActivated }) {
   }
 
   const statusConfig = {
+    service_error: {
+      icon: XCircle,
+      title: 'تعذر التحقق من الترخيص',
+      subtitle: 'تعذر الوصول إلى خدمة الترخيص. يرجى إعادة المحاولة.',
+      tone: 'rose',
+      chip: 'خطأ في التحقق',
+    },
     trial_expired: {
       icon: Clock,
       title: 'انتهت الفترة التجريبية',
@@ -151,6 +206,13 @@ export default function LicensePage({ onActivated }) {
       subtitle: 'ملف الترخيص تالف أو تم تعديله بطريقة غير صحيحة.',
       tone: 'rose',
       chip: 'ملف غير صالح',
+    },
+    clock_rollback: {
+      icon: Clock,
+      title: 'خطأ في توقيت النظام',
+      subtitle: 'تم اكتشاف تراجع في ساعة النظام. يرجى ضبط تاريخ ووقت الجهاز بشكل صحيح للمتابعة.',
+      tone: 'rose',
+      chip: 'توقيت غير صحيح',
     },
     expired: {
       icon: Clock,
@@ -177,9 +239,10 @@ export default function LicensePage({ onActivated }) {
 
   const cfg = statusConfig[status] || statusConfig.trial_expired
   const StatusIcon = cfg.icon
-  const whatsappHref = `https://wa.me/201152520844?text=${encodeURIComponent(
-    `مرحبًا، أريد تفعيل نظام MGIVIA.\nكود الجهاز: ${machineId || 'غير متوفر'}\nالحالة الحالية: ${cfg.title}`
-  )}`
+  const activationMessage = getCurrentLanguage() === 'en'
+    ? `Hello, I would like to activate NEXA POS.\nDevice code: ${machineId || 'Unavailable'}\nCurrent status: ${translateText(cfg.title, 'en')}`
+    : `مرحبًا، أريد تفعيل نظام NEXA POS.\nكود الجهاز: ${machineId || 'غير متوفر'}\nالحالة الحالية: ${cfg.title}`
+  const whatsappHref = `https://wa.me/962788383558?text=${encodeURIComponent(activationMessage)}`
   const toneMap = {
     rose: {
       hero: 'from-emerald-600 via-emerald-700 to-[#0a2416]',
@@ -212,11 +275,11 @@ export default function LicensePage({ onActivated }) {
           <div className="relative z-10 flex w-full flex-col justify-between">
             <div className="flex items-center gap-4">
               <div className="h-16 w-16">
-                <img src="./Logo MGIVIA.png" alt="MGIVIA" className="h-full w-full object-contain drop-shadow-[0_18px_34px_rgba(15,118,73,0.3)]" />
+                <img src={logoImg} alt="NEXA" className="h-full w-full object-contain drop-shadow-[0_18px_34px_rgba(15,118,73,0.3)]" />
               </div>
               <div>
-                <h1 className="text-[54px] font-black tracking-tight text-[#0f7649]">MGIVIA</h1>
-                <p className="-mt-1 text-sm font-bold tracking-[0.35em] text-[#7ea18f]">LICENSE CENTER</p>
+                <h1 className="text-[54px] font-black tracking-tight text-[#0f7649]">NEXA</h1>
+                <p className="-mt-1 text-sm font-bold tracking-[0.35em] text-[#7ea18f]">Your Need Our Next Feature</p>
               </div>
             </div>
 
@@ -228,7 +291,7 @@ export default function LicensePage({ onActivated }) {
 
               <h2 className="text-[62px] leading-[1.08] font-black text-[#0a2416]">
                 بوابة التفعيل
-                <span className="block text-[#0f7649]">الخاصة بنظام MGIVIA</span>
+                <span className="block text-[#0f7649]">الخاصة بنظام NEXA POS</span>
               </h2>
 
               <p className="mt-8 max-w-[640px] text-[24px] font-bold leading-[1.9] text-[#203d2e]">
@@ -239,7 +302,7 @@ export default function LicensePage({ onActivated }) {
 
             <div className="flex items-center justify-between border-t border-emerald-100/80 pt-8 text-sm font-black text-[#7ea18f]">
               <span>واجهة ترخيص موحدة مع تصميم النظام الحالي</span>
-              <span>2026 MGIVIA</span>
+              <span>2026 NEXA POS</span>
             </div>
           </div>
         </section>
@@ -255,7 +318,7 @@ export default function LicensePage({ onActivated }) {
               <div className="rounded-[2rem] border border-white/10 bg-white/8 px-6 py-7 sm:px-8 sm:py-9">
                 <div className="mb-7 text-center text-white">
                   <div className="mx-auto mb-5 h-20 w-20">
-                    <img src="./Logo MGIVIA.png" alt="MGIVIA POS" className="h-full w-full object-contain drop-shadow-[0_18px_34px_rgba(15,23,42,0.35)]" />
+                    <img src={logoImg} alt="NEXA POS" className="h-full w-full object-contain drop-shadow-[0_18px_34px_rgba(15,23,42,0.35)]" />
                   </div>
                   <h1 className="text-[38px] font-black leading-tight flex items-center justify-center gap-2">
                     <StatusIcon className={tone.icon} size={26} />
@@ -287,6 +350,7 @@ export default function LicensePage({ onActivated }) {
                         disabled={!machineId}
                         className={`flex h-[58px] w-[58px] items-center justify-center rounded-[1.3rem] border border-white/15 bg-white/15 text-white transition hover:bg-white/22 ${copied ? 'bg-emerald-500/25 text-emerald-100' : ''}`}
                         title="نسخ الكود"
+                        aria-label="نسخ كود الجهاز"
                       >
                         {copied ? <CheckCircle size={20} /> : <Copy size={18} />}
                       </button>
@@ -307,8 +371,8 @@ export default function LicensePage({ onActivated }) {
                   </a>
 
                   <div className="border-t border-white/10 pt-5">
-                    <label className="mb-3 block text-sm font-black text-white/90">رفع ملف الترخيص</label>
-                    <input ref={fileRef} type="file" accept=".json" onChange={handleFileUpload} className="hidden" id="license-file" />
+                    <label htmlFor="license-file" className="mb-3 block text-sm font-black text-white/90">رفع ملف الترخيص</label>
+                    <input ref={fileRef} type="file" accept=".nexalic" disabled={activating || !!success} onChange={handleFileUpload} className="sr-only" id="license-file" />
                     <label
                       htmlFor="license-file"
                       className={`block w-full cursor-pointer rounded-[1.6rem] border border-dashed px-6 py-8 text-center transition ${
@@ -328,7 +392,7 @@ export default function LicensePage({ onActivated }) {
                             <Upload size={22} />
                           </div>
                           <p className="font-black">اختر ملف الترخيص</p>
-                          <p className="text-xs font-bold text-emerald-100/70">license.json</p>
+                          <p className="text-xs font-bold text-emerald-100/70">NEXA-License.nexalic</p>
                         </div>
                       )}
                     </label>

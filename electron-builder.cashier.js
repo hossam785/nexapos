@@ -2,10 +2,10 @@ const base = require('./electron-builder.base')
 
 module.exports = {
   ...base,
-  appId: 'com.mgivia.pos.cashier',
-  productName: 'MGIVIA POS cashier',
-  executableName: 'MGIVIA POS cashier',
-  artifactName: 'MGIVIA POS cashier.${ext}',
+  appId: 'com.nexapos.cashier',
+  productName: 'NEXA POS cashier',
+  executableName: 'NEXA POS cashier',
+  artifactName: 'NEXA POS cashier.${ext}',
   directories: {
     output: 'releases/Cashier',
   },
@@ -15,8 +15,8 @@ module.exports = {
   },
   nsis: {
     ...base.nsis,
-    shortcutName: 'MGIVIA POS cashier',
-    uninstallDisplayName: 'MGIVIA POS cashier',
+    shortcutName: 'NEXA POS cashier',
+    uninstallDisplayName: 'NEXA POS cashier',
   },
 }
 

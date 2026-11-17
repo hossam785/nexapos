@@ -6,13 +6,14 @@ function createDomainFacade(domain, handlers) {
       const execute = typeof config === 'function' ? config : config.execute
       const validate = typeof config === 'function' ? null : config.validate
 
-      return [name, (event, ...args) => {
+      return [name, async (event, ...args) => {
         const meta = { domain, operation: name }
         try {
           if (typeof validate === 'function') {
             validate(...args)
           }
-          return success(execute(event, ...args), meta)
+          const data = await execute(event, ...args)
+          return success(data, meta)
         } catch (error) {
           return normalizeError(error, meta)
         }

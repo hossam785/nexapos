@@ -16,6 +16,8 @@ import {
   Warehouse,
   ClipboardList,
   Tags,
+  Award,
+  Vault,
 } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import SwitchAccountModal from './SwitchAccountModal'
@@ -24,11 +26,13 @@ import { canViewPage } from '../permissions/frontend'
 
 const MENU = [
   { key: 'cashier', label: 'المبيعات', icon: ShoppingCart, roles: ['admin', 'cashier'] },
-  { key: 'purchases', label: 'المشتريات', icon: Package, roles: ['admin'] },
+  { key: 'purchases', label: 'مركز الفواتير والتوريد', icon: Package, roles: ['admin'] },
   { key: 'products', label: 'المنتجات', icon: Package, roles: ['admin', 'cashier'] },
-  { key: 'suppliers', label: 'الموردين', icon: Users, roles: ['admin', 'cashier'] },
+  { key: 'suppliers', label: 'الموردين وعملاء الجملة', icon: Users, roles: ['admin', 'cashier'] },
+  { key: 'treasury', label: 'الخزنة والمالية', icon: Vault, roles: ['admin', 'cashier'] },
   { key: 'reports', label: 'التقارير', icon: BarChart3, roles: ['admin', 'cashier'] },
   { key: 'promotions', label: 'العروض', icon: Tags, roles: ['admin'] },
+  { key: 'loyalty', label: 'برنامج الولاء', icon: Award, roles: ['admin', 'cashier'] },
   { key: 'warehouse', label: 'إدارة المخازن', icon: Warehouse, roles: ['admin'] },
   { key: 'shifts', label: 'الورديات', icon: CalendarClock, roles: ['admin'] },
   { key: 'day-closing', label: 'فتح وإقفال اليوم', icon: Lock, roles: ['cashier'] },
@@ -45,6 +49,7 @@ export default function Sidebar({
   onSwitchUser,
   trialInfo,
   runtimeProfile = 'combined',
+  onTemporaryLock,
 }) {
   const collapsed = false
   const alertsDataRef = useRef({ lowStockItems: [], expiryAlerts: [] })
@@ -236,8 +241,10 @@ export default function Sidebar({
     <>
       <aside className="relative flex h-screen w-56 flex-col overflow-visible bg-[#0f3a25] text-white transition-all duration-300 ease-out">
 
-        <div className={`border-b border-[#1a5e3e] ${collapsed ? 'px-3 py-6 text-center' : 'px-5 py-6'}`}>
-          <h1 className={`font-bold transition-all ${collapsed ? 'text-base' : 'text-xl'}`}>MGIVIA</h1>
+        <div className={`border-b border-[#1a5e3e] ${collapsed ? 'px-3 py-4 text-center' : 'px-5 py-5'}`}>
+          <div className="flex items-center justify-between">
+            <h1 className={`font-bold transition-all ${collapsed ? 'text-base' : 'text-xl'}`}>NEXA POS</h1>
+          </div>
           {!collapsed && (
             <p className="mt-1 text-xs text-[#b4f0cc]">{user.role === 'admin' ? 'مدير النظام' : 'كاشير'}</p>
           )}
@@ -275,7 +282,7 @@ export default function Sidebar({
               </div>
               {!collapsed && (
                 <a
-                  href="https://wa.me/201152520844"
+                  href="https://wa.me/962788383558"
                   target="_blank"
                   rel="noreferrer"
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#276e4c] bg-[#1a6e45] px-3 py-2 text-[11px] font-bold text-white transition-all hover:bg-[#125433] active:scale-95"
@@ -293,7 +300,7 @@ export default function Sidebar({
               </div>
               {!collapsed && (
                 <a
-                  href="https://wa.me/201152520844"
+                  href="https://wa.me/962788383558"
                   target="_blank"
                   rel="noreferrer"
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#276e4c] bg-[#1a6e45] px-3 py-2 text-[11px] font-bold text-white transition-all hover:bg-[#125433] active:scale-95"
@@ -463,6 +470,19 @@ export default function Sidebar({
               )}
             </div>
           </div>
+
+          {onTemporaryLock && (
+            <button
+              onClick={onTemporaryLock}
+              title="تعطيل الوردية مؤقتًا (قفل الشاشة أثناء الاستراحة)"
+              className={`mb-1 flex w-full rounded-xl text-sm font-bold text-amber-200 transition hover:bg-[#135035] ${
+                collapsed ? 'justify-center px-2 py-3' : 'items-center gap-3 px-4 py-2.5'
+              }`}
+            >
+              <Lock size={16} className="text-amber-300 shrink-0" />
+              {!collapsed && <span className="truncate">تعطيل مؤقت</span>}
+            </button>
+          )}
 
           <button
             onClick={() => setShowSwitch(true)}

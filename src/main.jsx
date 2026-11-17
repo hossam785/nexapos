@@ -2,8 +2,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
+import { installLocalization, translateText } from './i18n'
 
 const rootElement = document.getElementById('root')
+installLocalization()
 
 function stringifyError(error) {
   if (!error) return 'Unknown error'
@@ -32,7 +34,7 @@ function renderFatalScreen(title, details) {
           <div style="width:52px;height:52px;border-radius:16px;background:#fee2e2;color:#dc2626;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;">!</div>
           <div>
             <div style="font-size:28px;font-weight:800;color:#0f172a;">${title}</div>
-            <div style="font-size:14px;font-weight:700;color:#64748b;margin-top:4px;">MGIVIA</div>
+            <div style="font-size:14px;font-weight:700;color:#64748b;margin-top:4px;">NEXA POS</div>
           </div>
         </div>
         <p style="margin:0 0 16px;font-size:15px;line-height:1.9;color:#334155;font-weight:700;">
@@ -75,7 +77,7 @@ class FatalErrorBoundary extends React.Component {
               </div>
               <div>
                 <h1 className="text-3xl font-black text-slate-900">تعذر تحميل الواجهة</h1>
-                <p className="mt-1 text-sm font-bold text-slate-500">MGIVIA</p>
+                <p className="mt-1 text-sm font-bold text-slate-500">NEXA POS</p>
               </div>
             </div>
             <p className="mb-5 text-sm font-bold leading-8 text-slate-700">
@@ -120,17 +122,39 @@ function restoreFocusAfterDialog(previousElement) {
 const originalAlert = window.alert
 window.alert = function patchedAlert(message) {
   const previousElement = document.activeElement
-  originalAlert(message)
+  originalAlert(translateText(String(message ?? '')))
   restoreFocusAfterDialog(previousElement)
 }
 
 const originalConfirm = window.confirm
 window.confirm = function patchedConfirm(message) {
   const previousElement = document.activeElement
-  const result = originalConfirm(message)
+  const result = originalConfirm(translateText(String(message ?? '')))
   restoreFocusAfterDialog(previousElement)
   return result
 }
+
+// Arabic keyboards type the digits ٠-٩ (or ۰-۹); a number field cannot read them and the amount silently
+// becomes 0. In numeric fields they are turned into 0-9 as they are typed or pasted.
+const EASTERN_DIGITS = /[\u0660-\u0669\u06F0-\u06F9\u066B\u066C]/
+function toWesternDigits(text) {
+  return String(text)
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0))
+    .replace(/\u066B/g, '.')
+    .replace(/\u066C/g, '')
+}
+document.addEventListener('beforeinput', (event) => {
+  const target = event.target
+  if (!(target instanceof HTMLInputElement)) return
+  if (event.inputType !== 'insertText' && event.inputType !== 'insertFromPaste') return
+  const typed = event.data ?? event.dataTransfer?.getData('text') ?? ''
+  if (!typed || !EASTERN_DIGITS.test(typed)) return
+  const numeric = target.type === 'number' || target.type === 'tel' || ['numeric', 'decimal', 'tel'].includes(target.inputMode)
+  if (!numeric) return
+  event.preventDefault()
+  document.execCommand('insertText', false, toWesternDigits(typed))
+}, true)
 
 window.addEventListener('error', (event) => {
   if (isExpectedHandledError(event.error || event.message)) return

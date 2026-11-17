@@ -1,0 +1,30 @@
+// The classic multi-device example and the shortage report, before and after pruning + transfer.
+const H = require('../helpers/harness')
+const { loadDevice, ok, mesh, sell, pid, qty, same, diff, ageLog, pruneAll, checkIntegrity, quiet, run } = H
+const f = (n) => H.file(`reg_${n}`)
+const report = (d) => JSON.stringify(d.api.syncReportsDB.getShortages({}).products.map((p) => [p.productName, p.currentQuantity, p.totalShortage, p.events.map((e) => [e.deltaUuid, e.sold, e.shortage])]))
+
+run(async () => {
+  const A = loadDevice(f('A'))
+  quiet(() => A.api.productsDB.add({ name: 'شاي', barcode: 'TEA', sell_price: 20, cost_price: 10, quantity: 50 }))
+  const code = A.mesh.pairingCode()
+  const B = loadDevice(f('B')); B.mesh.joinStore(code)
+  const C = loadDevice(f('C')); C.mesh.joinStore(code)
+  await mesh([A, B, C], 2)
+  ok([A, B, C].every((d) => qty(d, 'TEA') === 50), 'all start at 50')
+  sell(A, pid(A, 'TEA'), 50); sell(B, pid(B, 'TEA'), 50); sell(C, pid(C, 'TEA'), 50)
+  await mesh([A, B, C], 2)
+  ok([A, B, C].every((d) => qty(d, 'TEA') === -100), 'three offline sales of 50 => -100 everywhere')
+  A.db.prepare("UPDATE products SET quantity = quantity + 150 WHERE barcode = 'TEA'").run()
+  await mesh([A, B, C], 2)
+  ok([A, B, C].every((d) => qty(d, 'TEA') === 50), '50/50/50 sold + 150 received => 50 on every device')
+  ok(report(A) === report(B) && report(A) === report(C), 'shortage report identical on the three devices')
+  ok(A.api.syncReportsDB.getShortages({}).products[0]?.totalShortage === 100, 'shortage = 100')
+  for (const d of [A, B, C]) { ageLog(d); pruneAll(d) }
+  const N = loadDevice(f('N')); N.mesh.joinStore(code)
+  await mesh([A, B, C, N], 2)
+  ok(N.mesh.status().transfer.last?.status === 'done', 'new device joined through state transfer')
+  ok(report(N) === report(A), 'shortage report on the new device identical (history transferred)')
+  ok(same([A, B, C, N]), `four devices identical ${diff(A, N)}`)
+  for (const d of [A, B, C, N]) checkIntegrity(d, d.id.deviceCode)
+})

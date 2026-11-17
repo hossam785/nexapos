@@ -1,0 +1,24 @@
+.ota-page { min-width: 0; color: var(--text-primary); }
+.ota-page .card { min-width: 0; background: var(--bg-surface); border-color: var(--border-subtle); }
+.ota-page button { min-height: 44px; min-width: 44px; }
+.ota-page input:not([type='checkbox']):not([type='range']), .ota-page select { min-height: 44px; }
+.ota-page .btn-primary { background: var(--emerald-base); color: #fff; }
+.ota-page .ota-dialog { border-color: var(--border-medium); }
+.ota-page .ota-dialog input, .ota-page .ota-dialog textarea, .ota-page .ota-dialog select { max-width: 100%; }
+.ota-page table { min-width: 760px; }
+.ota-page table th, .ota-page table td { white-space: nowrap; }
+.ota-page table td div { overflow-wrap: anywhere; }
+.ota-page .ota-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; color: var(--text-primary); }
+.ota-pagination { display: flex; gap: 12px; align-items: center; justify-content: flex-end; margin-top: 16px; }
+.ota-page button:focus-visible, .ota-page input:focus-visible, .ota-page select:focus-visible, .ota-page textarea:focus-visible { outline: 3px solid var(--border-focus); outline-offset: 2px; }
+[data-theme='light'] .ota-page [style*='color: rgb(248, 250, 252)'],
+[data-theme='light'] .ota-page [style*='color: rgb(226, 232, 240)'],
+[data-theme='light'] .ota-page [style*='color: rgb(203, 213, 225)'],
+[data-theme='light'] .ota-page [style*='color: rgb(148, 163, 184)'] { color: var(--text-secondary) !important; }
+@media (max-width: 600px) {
+  .ota-page > .card, .ota-page .card { padding: 16px !important; }
+  .ota-page form { max-width: 100%; }
+  .ota-page form input[type='text'] { max-width: 100%; }
+  .ota-page .ota-dialog form fieldset > div[style*='grid'] { grid-template-columns: minmax(0, 1fr) !important; }
+  .ota-page .ota-dialog button { min-width: 0 !important; }
+}

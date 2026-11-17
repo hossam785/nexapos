@@ -1,4 +1,4 @@
-﻿const { BrowserWindow, shell } = require('electron')
+const { BrowserWindow, shell } = require('electron')
 const path = require('path')
 
 const isDev = process.env.NODE_ENV === 'development'
@@ -12,7 +12,7 @@ function restoreWindowFocus(win) {
 
 function loadRendererWindow(win, { runtimeContext, extraQuery = {} } = {}) {
   const runtimeProfile = runtimeContext?.profile?.name || 'combined'
-  const runtimeShell = runtimeContext?.shell || { windowTitle: 'MGIVIA POS', defaultPage: 'cashier' }
+  const runtimeShell = runtimeContext?.shell || { windowTitle: 'NEXA POS', defaultPage: 'cashier' }
   const query = {
     runtimeProfile,
     runtimeShell: runtimeShell.rendererMode || runtimeProfile,
@@ -35,7 +35,7 @@ function loadRendererWindow(win, { runtimeContext, extraQuery = {} } = {}) {
 }
 
 function createMainWindow({ runtimeContext, logger } = {}) {
-  const runtimeShell = runtimeContext?.shell || { windowTitle: 'MGIVIA POS', defaultPage: 'cashier' }
+  const runtimeShell = runtimeContext?.shell || { windowTitle: 'NEXA POS', defaultPage: 'cashier' }
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -53,7 +53,8 @@ function createMainWindow({ runtimeContext, logger } = {}) {
       backgroundThrottling: false,
     },
     show: false,
-    title: runtimeShell.windowTitle || 'MGIVIA POS',
+    title: runtimeShell.windowTitle || 'NEXA POS',
+    icon: path.join(__dirname, '../../build/logo.ico'),
   })
 
   win.setMenu(null)
@@ -90,6 +91,13 @@ function createMainWindow({ runtimeContext, logger } = {}) {
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     console.error('[mainWindow] did-fail-load', { errorCode, errorDescription, validatedURL })
     logger?.error?.('mainWindow did-fail-load', { errorCode, errorDescription, validatedURL })
+    if (isDev && (errorCode === -102 || errorCode === -105)) {
+      setTimeout(() => {
+        if (!win.isDestroyed()) {
+          loadRendererWindow(win, { runtimeContext })
+        }
+      }, 1000)
+    }
   })
 
   win.webContents.on('render-process-gone', (_event, details) => {
@@ -148,7 +156,8 @@ function createCustomerDisplayWindow({ runtimeContext, display, fullscreen = fal
       backgroundThrottling: false,
     },
     show: false,
-    title: 'MGIVIA Customer Display',
+    title: 'NEXA Customer Display',
+    icon: path.join(__dirname, '../../build/logo.ico'),
   })
 
   win.setMenu(null)
@@ -166,6 +175,19 @@ function createCustomerDisplayWindow({ runtimeContext, display, fullscreen = fal
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     console.error('[customerDisplay] did-fail-load', { errorCode, errorDescription, validatedURL })
     logger?.error?.('customerDisplay did-fail-load', { errorCode, errorDescription, validatedURL })
+    if (isDev && (errorCode === -102 || errorCode === -105)) {
+      setTimeout(() => {
+        if (!win.isDestroyed()) {
+          loadRendererWindow(win, {
+            runtimeContext,
+            extraQuery: {
+              customerDisplay: '1',
+              runtimeShell: 'customer-display',
+            },
+          })
+        }
+      }, 1000)
+    }
   })
 
   win.webContents.on('render-process-gone', (_event, details) => {

@@ -1,0 +1,24 @@
+{
+  "name": "nexa-cloud-server",
+  "version": "1.0.0",
+  "description": "NEXA POS 100-Year Multi-Tenant Offline-First Cloud Server",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js"
+  },
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "cors": "2.8.5",
+    "dotenv": "16.4.7",
+    "express": "4.21.2",
+    "helmet": "8.0.0",
+    "ioredis": "5.4.2",
+    "jsonwebtoken": "9.0.2",
+    "pg": "8.13.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "private": true
+}

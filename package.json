@@ -1,7 +1,7 @@
 {
-  "name": "mg-pos",
+  "name": "nexa-pos",
   "version": "2.2.2",
-  "description": "MGIVIA POS desktop application",
+  "description": "NEXA POS desktop application",
   "main": "electron/main.js",
   "scripts": {
     "dev:react": "vite",
@@ -20,6 +20,9 @@
     "dist:final-setups": "node scripts/prepare-final-setups.js",
     "dist:runtimes": "node scripts/clean-release.js all && npm run dist:admin && npm run dist:cashier && npm run dist:final-setups",
     "license": "node license-generator/generate.js",
+    "license:keygen": "node license-generator/keygen.js",
+    "dist:update": "node scripts/build-update-installer.js",
+    "package:update": "node scripts/create-update-package.js",
     "recovery": "node scripts/generate-recovery.js"
   },
   "keywords": [],

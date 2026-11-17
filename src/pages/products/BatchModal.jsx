@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useId } from 'react'
+import { cleanIpcError } from './ipcError'
 import { X, Calendar, Package, AlertTriangle, CheckCircle, Trash2, ChevronDown, AlertCircle, Clock, Ban } from 'lucide-react'
 
 const STATUS_CONFIG = {
@@ -20,10 +21,41 @@ function StatusBadge({ status }) {
   )
 }
 
+function normalizeDateString(dateVal) {
+  if (!dateVal) return null
+  if (typeof dateVal === 'string') {
+    const trimmed = dateVal.trim().slice(0, 10)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  }
+  const d = new Date(dateVal)
+  if (isNaN(d.getTime())) return null
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function addDaysToDate(dateStr, days) {
+  if (!dateStr || !days) return ''
+  const norm = normalizeDateString(dateStr)
+  if (!norm) return ''
+  const [y, m, d] = norm.split('-').map(Number)
+  const dateObj = new Date(y, m - 1, d + parseInt(days, 10))
+  const resYear = dateObj.getFullYear()
+  const resMonth = String(dateObj.getMonth() + 1).padStart(2, '0')
+  const resDay = String(dateObj.getDate()).padStart(2, '0')
+  return `${resYear}-${resMonth}-${resDay}`
+}
+
 function daysUntil(dateStr) {
   if (!dateStr) return null
-  const diff = Math.ceil((new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24))
-  return diff
+  const norm = normalizeDateString(dateStr)
+  if (!norm) return null
+  const [y, m, d] = norm.split('-').map(Number)
+  const targetMidnight = new Date(y, m - 1, d).getTime()
+  const now = new Date()
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  return Math.round((targetMidnight - todayMidnight) / (1000 * 60 * 60 * 24))
 }
 
 const ACTIONS = [
@@ -35,6 +67,7 @@ const ACTIONS = [
 
 // ─── Add Batch Modal ─────────────────────────────────────────────────────────
 export function AddBatchModal({ product, suppliers = [], user, settings = {}, onSave, onClose }) {
+  const fieldId = useId()
   const [form, setForm] = useState({
     production_date: '',
     expiry_date: '',
@@ -48,13 +81,12 @@ export function AddBatchModal({ product, suppliers = [], user, settings = {}, on
   const [calculatedExpiry, setCalculatedExpiry] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const savingRef = useRef(false)
 
-  // حساب تاريخ الانتهاء تلقائياً
+  // حساب تاريخ الانتهاء تلقائياً بدون انزياح المناطق الزمنية
   useEffect(() => {
     if (form.production_date && form.shelf_life_days && !form.expiry_date) {
-      const prod = new Date(form.production_date)
-      prod.setDate(prod.getDate() + parseInt(form.shelf_life_days))
-      setCalculatedExpiry(prod.toISOString().slice(0, 10))
+      setCalculatedExpiry(addDaysToDate(form.production_date, form.shelf_life_days))
     } else {
       setCalculatedExpiry('')
     }
@@ -73,6 +105,15 @@ export function AddBatchModal({ product, suppliers = [], user, settings = {}, on
       requestAnimationFrame(() => window.dispatchEvent(new Event('mgpos:restore-focus')))
       return
     }
+    // a purchase price must be a real amount of zero or more (a blank means 0)
+    const purchasePrice = form.purchase_price === '' ? 0 : Number(form.purchase_price)
+    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) {
+      setSaveError('سعر الشراء لازم يكون رقم صفر أو أكبر')
+      return
+    }
+    // a second press while the batch is being saved is ignored
+    if (savingRef.current) return
+    savingRef.current = true
 
     setSaving(true)
     try {
@@ -83,7 +124,7 @@ export function AddBatchModal({ product, suppliers = [], user, settings = {}, on
         expiry_date: form.expiry_date || calculatedExpiry || null,
         shelf_life_days: form.shelf_life_days ? parseInt(form.shelf_life_days) : null,
         quantity: parseFloat(form.quantity),
-        purchase_price: parseFloat(form.purchase_price) || 0,
+        purchase_price: purchasePrice,
         supplier_id: form.supplier_id ? parseInt(form.supplier_id) : null,
         batch_number: form.batch_number.trim() || null,
         notes: form.notes.trim() || null,
@@ -94,9 +135,10 @@ export function AddBatchModal({ product, suppliers = [], user, settings = {}, on
       onSave(result)
     } catch (e) {
       console.error(e)
-      setSaveError(e?.message || '\u062d\u062f\u062b \u062e\u0637\u0623 \u0623\u062b\u0646\u0627\u0621 \u0625\u0636\u0627\u0641\u0629 \u0627\u0644\u062f\u0641\u0639\u0629')
+      setSaveError(cleanIpcError(e, 'حدث خطأ أثناء إضافة الدفعة'))
       requestAnimationFrame(() => window.dispatchEvent(new Event('mgpos:restore-focus')))
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
@@ -113,7 +155,7 @@ export function AddBatchModal({ product, suppliers = [], user, settings = {}, on
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-l from-emerald-50 to-white">
           <div>
             <h2 className="text-lg font-black text-slate-800">إضافة دفعة جديدة</h2>
-            <p className="text-xs text-slate-500 mt-0.5">{product.name}</p>
+            <p data-no-translate className="text-xs text-slate-500 mt-0.5">{product.name}</p>
           </div>
           <button onClick={onClose}
             className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
@@ -126,14 +168,14 @@ export function AddBatchModal({ product, suppliers = [], user, settings = {}, on
           {/* الكمية + سعر الشراء */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5">الكمية <span className="text-red-500">*</span></label>
-              <input type="number" value={form.quantity} onChange={e => set('quantity', e.target.value)}
+              <label htmlFor="batch-quantity" className="block text-xs font-bold text-slate-500 mb-1.5">الكمية <span className="text-red-500">*</span></label>
+              <input id="batch-quantity" type="number" value={form.quantity} onChange={e => set('quantity', e.target.value)}
                 placeholder="مثال: 50"
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700/30 focus:border-emerald-600 transition" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5">سعر الشراء</label>
-              <input type="number" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)}
+              <label htmlFor="batch-purchase-price" className="block text-xs font-bold text-slate-500 mb-1.5">سعر الشراء</label>
+              <input id="batch-purchase-price" type="number" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)}
                 placeholder="0.00"
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700/30 focus:border-emerald-600 transition" />
             </div>
@@ -141,8 +183,8 @@ export function AddBatchModal({ product, suppliers = [], user, settings = {}, on
 
           {/* رقم الدفعة */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1.5">رقم الدفعة (اختياري)</label>
-            <input type="text" value={form.batch_number} onChange={e => set('batch_number', e.target.value)}
+            <label htmlFor={`${fieldId}-number`} className="block text-xs font-bold text-slate-500 mb-1.5">رقم الدفعة (اختياري)</label>
+            <input id={`${fieldId}-number`} type="text" value={form.batch_number} onChange={e => set('batch_number', e.target.value)}
               placeholder="مثال: LOT-2024-001 (أو اتركه فارغاً للتوليد التلقائي)"
               className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700/30 focus:border-emerald-600 transition" />
           </div>
@@ -154,24 +196,24 @@ export function AddBatchModal({ product, suppliers = [], user, settings = {}, on
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">تاريخ الإنتاج</label>
-                <input type="date" value={form.production_date} onChange={e => set('production_date', e.target.value)}
+                <label htmlFor={`${fieldId}-production`} className="block text-xs font-bold text-slate-500 mb-1.5">تاريخ الإنتاج</label>
+                <input id={`${fieldId}-production`} type="date" value={form.production_date} onChange={e => set('production_date', e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700/30 focus:border-emerald-600 transition bg-white" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">تاريخ الانتهاء</label>
-                <input type="date" value={form.expiry_date} onChange={e => set('expiry_date', e.target.value)}
+                <label htmlFor={`${fieldId}-expiry`} className="block text-xs font-bold text-slate-500 mb-1.5">تاريخ الانتهاء</label>
+                <input id={`${fieldId}-expiry`} type="date" value={form.expiry_date} onChange={e => set('expiry_date', e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700/30 focus:border-emerald-600 transition bg-white" />
               </div>
             </div>
 
             {/* أو اكتب عدد الأيام */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5">
+              <label htmlFor={`${fieldId}-shelf`} className="block text-xs font-bold text-slate-500 mb-1.5">
                 مدة الصلاحية بالأيام
                 <span className="text-slate-400 font-normal mr-1">(إذا لم تعرف تاريخ الانتهاء)</span>
               </label>
-              <input type="number" value={form.shelf_life_days} onChange={e => set('shelf_life_days', e.target.value)}
+              <input id={`${fieldId}-shelf`} type="number" value={form.shelf_life_days} onChange={e => set('shelf_life_days', e.target.value)}
                 placeholder="مثال: 14 يوم"
                 className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700/30 focus:border-emerald-600 transition bg-white" />
             </div>
@@ -202,19 +244,19 @@ export function AddBatchModal({ product, suppliers = [], user, settings = {}, on
           {/* المورد */}
           {suppliers.length > 0 && (
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5">المورد</label>
-              <select value={form.supplier_id} onChange={e => set('supplier_id', e.target.value)}
+              <label htmlFor={`${fieldId}-supplier`} className="block text-xs font-bold text-slate-500 mb-1.5">المورد</label>
+              <select id={`${fieldId}-supplier`} value={form.supplier_id} onChange={e => set('supplier_id', e.target.value)}
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700/30 focus:border-emerald-600 transition bg-white">
                 <option value="">بدون مورد</option>
-                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {suppliers.map(s => <option data-no-translate key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
           )}
 
           {/* ملاحظات */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1.5">ملاحظات</label>
-            <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
+            <label htmlFor={`${fieldId}-notes`} className="block text-xs font-bold text-slate-500 mb-1.5">ملاحظات</label>
+            <textarea id={`${fieldId}-notes`} value={form.notes} onChange={e => set('notes', e.target.value)}
               rows={2} placeholder="ملاحظات إضافية..."
               className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700/30 focus:border-emerald-600 transition resize-none" />
           </div>
@@ -259,22 +301,30 @@ export function BatchesListModal({ product, user, settings = {}, onClose, onBatc
   const [actionType, setActionType] = useState('')
   const [actionNotes, setActionNotes] = useState('')
   const [actionError, setActionError] = useState('')
+  const actionRef = useRef(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     loadBatches()
-    window.mgpos.db.getSuppliers?.().then(s => setSuppliers(s || []))
+    // suppliers are optional here: a user without the supplier right gets an empty list, not an error
+    window.mgpos.db.getSuppliers?.().then(s => setSuppliers(s || [])).catch(() => setSuppliers([]))
   }, [])
 
   async function loadBatches() {
     setLoading(true)
-    const data = await window.mgpos.batches.getByProduct(product.id)
-    setBatches(data || [])
-    setLoading(false)
+    try {
+      const data = await window.mgpos.batches.getByProduct(product.id)
+      setBatches(data || [])
+    } catch (e) {
+      setActionError(cleanIpcError(e, 'تعذر تحميل دفعات الصنف'))
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleAction() {
-    if (!actionBatch || !actionType) return
+    if (!actionBatch || !actionType || actionRef.current) return
+    actionRef.current = true
     setActionError('')
     try {
       await window.mgpos.batches.addAction(actionBatch.id, actionType, actionNotes, user?.id)
@@ -284,8 +334,10 @@ export function BatchesListModal({ product, user, settings = {}, onClose, onBatc
       loadBatches()
       window.dispatchEvent(new Event('dashboard:refresh'))
     } catch (e) {
-      setActionError('\u062e\u0637\u0623: ' + (e?.message || '\u062a\u0639\u0630\u0631 \u062a\u0646\u0641\u064a\u0630 \u0627\u0644\u0625\u062c\u0631\u0627\u0621'))
+      setActionError('\u062e\u0637\u0623: ' + cleanIpcError(e, 'تعذر تنفيذ الإجراء'))
       requestAnimationFrame(() => window.dispatchEvent(new Event('mgpos:restore-focus')))
+    } finally {
+      actionRef.current = false
     }
   }
 
@@ -305,7 +357,7 @@ export function BatchesListModal({ product, user, settings = {}, onClose, onBatc
               <Package size={18} className="text-emerald-700" />
               دفعات المنتج
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5 font-bold">{product.name}</p>
+            <p data-no-translate className="text-xs text-slate-500 mt-0.5 font-bold">{product.name}</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowAdd(true)}
@@ -369,7 +421,7 @@ export function BatchesListModal({ product, user, settings = {}, onClose, onBatc
                       </span>
                       <StatusBadge status={batch.status} />
                       {batch.supplier_name && (
-                        <span className="text-[10px] text-slate-400 font-medium">
+                        <span data-no-translate className="text-[10px] text-slate-400 font-medium">
                           {batch.supplier_name}
                         </span>
                       )}

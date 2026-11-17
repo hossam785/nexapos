@@ -8,3 +8,4 @@ releases
 *.sqlite
 *.sqlite-journal
 Recovery Files
+license-generator/keys/

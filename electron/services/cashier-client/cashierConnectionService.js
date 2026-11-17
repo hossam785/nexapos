@@ -13,21 +13,36 @@ function createError(message, code, details) {
 }
 
 function normalizeServerUrl(input) {
-  const raw = String(input || '').trim()
+  const raw = typeof input === 'string' ? input.trim() : ''
   if (!raw) {
-    throw createError('Server address is required', 'SERVER_URL_REQUIRED')
+    throw createError('اكتب عنوان السيرفر أو الـ IP أولًا', 'SERVER_URL_REQUIRED')
   }
 
-  const candidate = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`
+  const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(raw)
+  const candidate = hasScheme ? raw : `http://${raw}`
   let parsed
   try {
     parsed = new URL(candidate)
   } catch (error) {
-    throw createError('Server address is invalid', 'SERVER_URL_INVALID', { input: raw })
+    throw createError('عنوان السيرفر أو الـ IP غير صالح', 'SERVER_URL_INVALID')
   }
 
-  if (!parsed.port) {
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw createError('عنوان السيرفر يجب أن يستخدم HTTP أو HTTPS', 'INVALID_PROTOCOL')
+  }
+
+  if (!parsed.hostname || parsed.hostname.includes('..') || parsed.username || parsed.password || /@/.test(candidate.split('/')[2] || '')) {
+    throw createError('عنوان السيرفر غير صالح', 'SERVER_URL_INVALID')
+  }
+  const authority = candidate.split('/')[2] || ''
+  const hasExplicitPort = /(?:\]:|[^\]:]:)\d+$/.test(authority)
+  if (!parsed.port && !hasExplicitPort) {
     parsed.port = String(DEFAULT_SERVER_PORT)
+  } else if (parsed.port) {
+    const portNum = Number(parsed.port)
+    if (Number.isNaN(portNum) || portNum <= 0 || portNum > 65535) {
+      throw createError('رقم المنفذ يجب أن يكون بين 1 و 65535', 'INVALID_PORT')
+    }
   }
 
   parsed.pathname = ''
@@ -36,13 +51,13 @@ function normalizeServerUrl(input) {
   return parsed.toString().replace(/\/$/, '')
 }
 
-function requestJson(method, targetUrl, body) {
+function requestJson(method, targetUrl, body, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     let parsed
     try {
       parsed = new URL(targetUrl)
     } catch (error) {
-      reject(createError('Server URL is invalid', 'SERVER_URL_INVALID', { targetUrl }))
+      reject(createError('عنوان السيرفر غير صالح', 'SERVER_URL_INVALID'))
       return
     }
 
@@ -57,6 +72,7 @@ function requestJson(method, targetUrl, body) {
         method,
         headers: {
           Accept: 'application/json',
+          ...extraHeaders,
           ...(payload
             ? {
                 'Content-Type': 'application/json',
@@ -68,7 +84,19 @@ function requestJson(method, targetUrl, body) {
       },
       (res) => {
         const chunks = []
-        res.on('data', (chunk) => chunks.push(chunk))
+        let size = 0
+        res.on('data', (chunk) => {
+          size += chunk.length
+          if (size > 32 * 1024 * 1024) {
+            const error = createError('رد السيرفر أكبر من الحد المسموح', 'SERVER_RESPONSE_TOO_LARGE')
+            reject(error)
+            res.destroy(error)
+            return
+          }
+          chunks.push(chunk)
+        })
+        res.on('aborted', () => reject(createError('انقطع رد السيرفر', 'SERVER_RESPONSE_ABORTED')))
+        res.on('error', (error) => reject(createError('تعذر قراءة رد السيرفر', error.code || 'SERVER_RESPONSE_ABORTED')))
         res.on('end', () => {
           const text = Buffer.concat(chunks).toString('utf8')
           let json = null
@@ -76,13 +104,13 @@ function requestJson(method, targetUrl, body) {
             try {
               json = JSON.parse(text)
             } catch (error) {
-              reject(createError('Server returned an invalid response', 'SERVER_RESPONSE_INVALID'))
+              reject(createError('رد السيرفر غير صالح', 'SERVER_RESPONSE_INVALID'))
               return
             }
           }
 
           if (res.statusCode >= 400) {
-            const errorMessage = json?.error?.message || json?.message || `Server responded with status ${res.statusCode}`
+            const errorMessage = json?.error?.message || json?.message || `رد السيرفر بحالة ${res.statusCode}`
             const errorCode = json?.error?.code || `HTTP_${res.statusCode}`
             reject(createError(errorMessage, errorCode, json?.error?.details))
             return
@@ -98,7 +126,7 @@ function requestJson(method, targetUrl, body) {
     })
 
     req.on('error', (error) => {
-      reject(createError(error.message || 'Could not reach server', error.code || 'SERVER_UNREACHABLE'))
+      reject(createError(error.code === 'SERVER_TIMEOUT' ? 'انتهت مهلة الاتصال بالسيرفر' : 'تعذر الوصول إلى السيرفر', error.code || 'SERVER_UNREACHABLE'))
     })
 
     if (payload) {
@@ -108,7 +136,9 @@ function requestJson(method, targetUrl, body) {
   })
 }
 
-function createCashierConnectionService({ app }) {
+function createCashierConnectionService({ app, storeKeyProvider = null }) {
+  let generation = 0
+  let connecting = false
   function getConfigPath() {
     return path.join(app.getPath('userData'), 'cashier-connection.json')
   }
@@ -116,24 +146,39 @@ function createCashierConnectionService({ app }) {
   function loadConfig() {
     try {
       const file = fs.readFileSync(getConfigPath(), 'utf8')
-      return JSON.parse(file)
+      const config = JSON.parse(file)
+      if (!config || typeof config !== 'object' || Array.isArray(config) || typeof config.serverUrl !== 'string') throw new Error('invalid config')
+      return { ...config, serverUrl: normalizeServerUrl(config.serverUrl) }
     } catch (error) {
-      return null
+      if (error.code === 'ENOENT') return null
+      throw createError('تعذر قراءة إعدادات ربط الكاشير', 'CASHIER_CONFIG_INVALID')
     }
   }
 
   function saveConfig(config) {
-    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), 'utf8')
+    const target = getConfigPath()
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    const temporary = `${target}.${process.pid}.${require('crypto').randomBytes(8).toString('hex')}.tmp`
+    try {
+      fs.writeFileSync(temporary, JSON.stringify(config, null, 2), { encoding: 'utf8', flag: 'wx' })
+      fs.renameSync(temporary, target)
+    } finally {
+      try { fs.unlinkSync(temporary) } catch (error) { if (error.code !== 'ENOENT') throw error }
+    }
   }
 
   function clearConfig() {
     try {
       fs.unlinkSync(getConfigPath())
-    } catch (error) {}
+    } catch (error) { if (error.code !== 'ENOENT') throw error }
   }
 
   async function getHealth(serverUrl) {
-    return requestJson('GET', `${serverUrl}/health`)
+    const health = await requestJson('GET', `${serverUrl}/health`)
+    if (!health || health.ok !== true || typeof health.appName !== 'string' || !health.appName || typeof health.runtimeProfile !== 'string') {
+      throw createError('رد السيرفر غير صالح', 'SERVER_RESPONSE_INVALID')
+    }
+    return health
   }
 
   return {
@@ -164,28 +209,28 @@ function createCashierConnectionService({ app }) {
           connected: false,
           serverUrl: config.serverUrl,
           serverInfo: null,
-          lastError: error.message || 'Could not reach server',
+          lastError: error.message || 'تعذر الوصول إلى السيرفر',
         }
       }
     },
 
     async connect({ serverUrl }) {
-      const normalizedUrl = normalizeServerUrl(serverUrl)
-      const serverInfo = await getHealth(normalizedUrl)
-      saveConfig({
-        serverUrl: normalizedUrl,
-        connectedAt: new Date().toISOString(),
-      })
-      return {
-        configured: true,
-        connected: true,
-        serverUrl: normalizedUrl,
-        serverInfo,
-        lastError: null,
+      if (connecting) throw createError('الاتصال جاري بالفعل', 'CASHIER_CONNECT_IN_PROGRESS')
+      connecting = true
+      const current = ++generation
+      try {
+        const normalizedUrl = normalizeServerUrl(serverUrl)
+        const serverInfo = await getHealth(normalizedUrl)
+        if (current !== generation) throw createError('تم إلغاء الاتصال', 'CASHIER_CONNECT_CANCELLED')
+        saveConfig({ serverUrl: normalizedUrl, connectedAt: new Date().toISOString() })
+        return { configured: true, connected: true, serverUrl: normalizedUrl, serverInfo, lastError: null }
+      } finally {
+        connecting = false
       }
     },
 
     disconnect() {
+      generation++
       clearConfig()
       return {
         configured: false,
@@ -197,14 +242,17 @@ function createCashierConnectionService({ app }) {
     },
 
     async invoke(channel, args = []) {
+      if (typeof channel !== 'string' || !channel.trim() || !Array.isArray(args)) throw createError('طلب السيرفر غير صالح', 'INVALID_REQUEST')
       const config = loadConfig()
       if (!config?.serverUrl) {
-        throw createError('Cashier is not connected to a server', 'CASHIER_NOT_CONNECTED')
+        throw createError('الكاشير غير متصل بالسيرفر', 'CASHIER_NOT_CONNECTED')
       }
 
-      const response = await requestJson('POST', `${config.serverUrl}/invoke`, { channel, args })
-      if (!response?.ok) {
-        const errorMessage = response?.error?.message || 'Server request failed'
+      // the main device only answers devices of the same store (key from the store pairing code)
+      const response = await requestJson('POST', `${config.serverUrl}/invoke`, { channel, args }, storeKeyProvider ? { 'x-nexa-store-key': storeKeyProvider() || '' } : {})
+      if (!response || typeof response !== 'object' || typeof response.ok !== 'boolean') throw createError('رد السيرفر غير صالح', 'SERVER_RESPONSE_INVALID')
+      if (!response.ok) {
+        const errorMessage = response?.error?.message || 'فشل طلب السيرفر'
         const errorCode = response?.error?.code || 'SERVER_REQUEST_FAILED'
         throw createError(errorMessage, errorCode, response?.error?.details)
       }

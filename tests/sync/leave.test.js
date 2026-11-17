@@ -1,0 +1,85 @@
+// Taking a device out of its store and bringing it back: merge what it did meanwhile, or wipe it and take
+// another store's data. Nothing is ever deleted on the other devices.
+const H = require('../helpers/harness')
+const { loadDevice, ok, throwsMsg, mesh, sell, pid, qty, same, diff, checkIntegrity, quiet, run } = H
+
+run(async () => {
+  const A = loadDevice(H.file('lv_A'))
+  quiet(() => { for (let i = 1; i <= 4; i++) A.api.productsDB.add({ name: `صنف ${i}`, barcode: `V${i}`, sell_price: 10, cost_price: 4, quantity: 100 }) })
+  const code = A.mesh.pairingCode()
+  const B = loadDevice(H.file('lv_B')); B.mesh.joinStore(code)
+  await mesh([A, B], 2)
+  // B sells and nobody has read it yet: leaving warns
+  sell(B, pid(B, 'V1'), 2)
+  ok(throwsMsg(() => B.mesh.leaveStore(), /لسه ماوصلتش/), 'leaving with events nobody received warns first')
+  await mesh([A, B], 1)
+  const left = B.mesh.leaveStore()
+  ok(left.left === A.mesh.status().storeUuid && B.mesh.status().leftStore === left.left, 'B left the store (the old store is remembered)')
+  ok(B.mesh.storeTag() !== A.mesh.storeTag(), 'B no longer answers to the store key (peers stop syncing with it)')
+  // separate lives
+  sell(B, pid(B, 'V2'), 5); sell(A, pid(A, 'V2'), 3); sell(A, pid(A, 'V1'), 1)
+  await mesh([A, B], 2) // different stores: nothing should cross
+  ok(qty(A, 'V2') === 97 && qty(B, 'V2') === 95, 'while separate, nothing crosses between A and B')
+  ok(A.db.prepare('SELECT COUNT(*) c FROM products').get().c === 4, 'A untouched by B leaving')
+  // merging into another store is refused
+  const C = loadDevice(H.file('lv_C'))
+  ok(throwsMsg(() => B.mesh.joinStore(C.mesh.pairingCode(), { mode: 'merge' }), /نفس المحل/), 'merge is only for the store the device left')
+  ok(throwsMsg(() => B.mesh.joinStore(code), /عليه بيانات/), 'a device with data cannot join silently: it must choose')
+  // back to the same store, merging
+  const back = B.mesh.joinStore(code, { mode: 'merge' })
+  ok(back.merged && !B.mesh.status().leftStore, 'B came back to its store (merge)')
+  await mesh([A, B], 3)
+  ok(qty(A, 'V2') === 92 && qty(B, 'V2') === 92 && qty(A, 'V1') === 97 && qty(B, 'V1') === 97, `what each did while separate is counted once on both (V2 = 100 - 5 - 3 = ${qty(A, 'V2')}, V1 = 100 - 2 - 1 = ${qty(A, 'V1')})`)
+  ok(same([A, B]), `A and B identical after the merge ${diff(A, B)}`)
+  // B leaves again and joins another store, wiping its data
+  await mesh([A, B], 1)
+  B.mesh.leaveStore()
+  quiet(() => { C.api.productsDB.add({ name: 'محل تاني', barcode: 'C1', sell_price: 3, cost_price: 1, quantity: 9 }) })
+  quiet(() => B.api.systemDB.reset())
+  B.mesh.joinStore(C.mesh.pairingCode(), { mode: 'replace' })
+  await mesh([B, C], 2)
+  ok(same([B, C]) && !B.db.prepare("SELECT 1 FROM products WHERE barcode LIKE 'V%'").get(), `B wiped and took the other store's data, nothing of the old store left ${diff(B, C)}`)
+  ok(!B.db.prepare("SELECT 1 FROM sync_log WHERE payload LIKE '%\"barcode\":\"V1\"%'").get(), 'no event of the old store stays in B\'s log (it would leak into the new store)')
+  await mesh([A], 1)
+  ok(A.db.prepare('SELECT COUNT(*) c FROM products').get().c === 4 && qty(A, 'V2') === 92, 'the old store is untouched by all of this')
+  // D3: a device (R) that joined B while B was separate. B's merge back into A names R, R keeps its solo store.
+  const P = loadDevice(H.file('lv_P'))
+  quiet(() => { for (let i = 1; i <= 2; i++) P.api.productsDB.add({ name: `صنف د${i}`, barcode: `W${i}`, sell_price: 10, cost_price: 4, quantity: 50 }) })
+  const Q = loadDevice(H.file('lv_Q')); Q.mesh.joinStore(P.mesh.pairingCode())
+  await mesh([P, Q], 2)
+  Q.mesh.leaveStore()
+  const soloStore = Q.mesh.status().storeUuid
+  const R = loadDevice(H.file('lv_R')); R.mesh.joinStore(Q.mesh.pairingCode())
+  await mesh([Q, R], 2)
+  ok(R.mesh.status().storeUuid === soloStore && pid(R, 'W1') !== undefined, 'R joined the solo store of Q and got its products')
+  sell(R, pid(R, 'W1'), 3)
+  await mesh([Q, R], 2)
+  const rejoin = Q.mesh.joinStore(P.mesh.pairingCode(), { mode: 'merge' })
+  ok(Array.isArray(rejoin.separatedDevices) && rejoin.separatedDevices.some((d) => d.deviceUuid === R.uuid), 'the merge names R (the device that joined Q while Q was separate)')
+  ok(rejoin.separatedDevices.every((d) => d.deviceUuid !== P.uuid && d.deviceUuid !== Q.uuid), 'the merge does not name the old store devices or Q itself')
+  ok(Q.mesh.status().separatedDevices.some((d) => d.deviceUuid === R.uuid), 'the list stays on Q for the screen (status)')
+  // R's sale is a real shop sale: it reaches the store exactly once, through Q's log
+  const rInvoices = R.db.prepare('SELECT invoice_uuid u FROM invoices WHERE device_uuid = ?').all(R.uuid).map((r) => r.u)
+  ok(rInvoices.length === 1, `R made one sale while separate (${rInvoices.length})`)
+  const onDev = (dev) => dev.db.prepare('SELECT COUNT(*) c FROM invoices WHERE invoice_uuid = ?').get(rInvoices[0]).c
+  await mesh([P, Q], 3)
+  ok(onDev(P) === 1 && onDev(Q) === 1, `R's sale is in the store exactly once (P ${onDev(P)}, Q ${onDev(Q)})`)
+  ok(qty(P, 'W1') === 47 && qty(Q, 'W1') === 47, `stock moved once: 50 - 3 = 47 (P ${qty(P, 'W1')}, Q ${qty(Q, 'W1')})`)
+  await mesh([P, Q], 2)
+  ok(onDev(P) === 1 && qty(P, 'W1') === 47 && same([P, Q]), `another round changes nothing ${diff(P, Q)}`)
+  // R keeps its solo store: what it records now stays on R, it does not reach the store
+  sell(R, pid(R, 'W2'), 1)
+  ok(R.mesh.status().storeUuid === soloStore && qty(R, 'W2') === 49, 'R keeps working in its solo store')
+  await mesh([P, Q, R], 2)
+  ok(qty(P, 'W2') === 50 && onDev(P) === 1, 'after the merge a sale on R does not reach the store until R is re-linked')
+  // re-link R with the store's code (wipe, as the screen does: admin password + automatic backup are checked there)
+  quiet(() => R.api.systemDB.reset())
+  R.mesh.joinStore(P.mesh.pairingCode(), { mode: 'replace' })
+  ok(R.mesh.status().storeUuid === P.mesh.status().storeUuid, 'R re-linked to the store with its code')
+  await mesh([P, Q, R], 3)
+  ok(onDev(R) === 1 && onDev(P) === 1 && onDev(Q) === 1, 'after the re-link R\'s sale is still in every device, once')
+  ok(qty(R, 'W1') === 47 && qty(P, 'W1') === 47, 'stock stays 47 on every device after the re-link')
+  ok(same([P, Q, R]), `P, Q and R converge after the re-link ${diff(P, R)}`)
+  for (const d of [P, Q, R]) checkIntegrity(d, d.id.deviceCode)
+  for (const d of [A, B, C]) checkIntegrity(d, d.id.deviceCode)
+})

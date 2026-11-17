@@ -1,0 +1,23 @@
+.audit-page { color: var(--text-primary); font-size: 14px; display: grid; gap: 20px; min-width: 0; }
+.audit-page * { box-sizing: border-box; }
+.audit-heading, .audit-dialog header, .audit-dialog footer, .audit-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.audit-heading h1, .audit-dialog h2 { margin: 0; font-size: 22px; }
+.audit-heading p { color: var(--text-secondary); margin: 6px 0 0; }
+.audit-page button, .audit-dialog button, .audit-page input, .audit-page select, .audit-dialog input, .audit-dialog textarea { font: inherit; color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-medium); border-radius: 8px; min-height: 44px; padding: 8px 12px; }
+.audit-page button, .audit-dialog button { cursor: pointer; }
+.audit-page button:disabled, .audit-dialog button:disabled { opacity: .5; cursor: not-allowed; }
+.audit-page button:focus-visible, .audit-dialog :focus-visible, .audit-page input:focus-visible, .audit-page select:focus-visible { outline: 3px solid var(--border-focus); outline-offset: 2px; }
+.audit-page nav { display: flex; gap: 6px; }
+.audit-page nav [aria-pressed='true'], .audit-dialog .audit-primary { background: var(--emerald-subtle); border-color: var(--emerald-base); color: var(--emerald-base); }
+.audit-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.audit-cards > div, .audit-panel, .audit-notice { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px; }
+.audit-cards span { color: var(--text-secondary); display: block; }.audit-cards strong { display: block; font-size: 24px; margin-top: 8px; }
+.audit-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 16px; }.audit-controls label { flex: 1 1 180px; }
+.audit-page label, .audit-dialog label { display: block; color: var(--text-secondary); }.audit-page input, .audit-page select, .audit-dialog input, .audit-dialog textarea { display: block; width: 100%; margin-top: 5px; }
+.audit-panel { min-width: 0; }.audit-table { overflow-x: auto; }.audit-table table { width: 100%; min-width: 760px; border-collapse: collapse; text-align: start; }.audit-table th, .audit-table td { text-align: start; padding: 12px; border-bottom: 1px solid var(--border-subtle); overflow-wrap: anywhere; }.audit-table th, .audit-table small { color: var(--text-secondary); }
+.audit-pagination { justify-content: flex-end; margin-top: 16px; }.audit-error { color: var(--rose-base); overflow-wrap: anywhere; }.audit-notice { border-color: var(--emerald-border); }
+.audit-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,.7); display: flex; justify-content: center; align-items: center; padding: 16px; }
+.audit-dialog { background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-medium); border-radius: 14px; width: min(760px, 100%); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; display: grid; gap: 16px; font-size: 14px; }
+.audit-dialog header { border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; }.audit-dialog header button { font-size: 22px; }.audit-dialog footer { justify-content: flex-end; }
+.audit-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 0; }.audit-facts > div { background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; min-width: 0; }.audit-facts dt { color: var(--text-secondary); }.audit-facts dd { margin: 5px 0 0; overflow-wrap: anywhere; }
+.audit-dialog pre, .audit-dialog textarea { font-family: Consolas, monospace; text-align: left; direction: ltr; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg-canvas); color: var(--text-primary); }.audit-dialog pre { padding: 12px; border-radius: 8px; overflow: auto; max-height: 250px; }.audit-dialog textarea { resize: vertical; }

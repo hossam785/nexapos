@@ -1,6 +1,8 @@
-const HERO_TITLE = 'منصة تشغيل حديثة لإدارة المبيعات والمخزون والعملاء'
-const HERO_SUBTITLE = 'واجهة أكثر هدوءًا وتنظيمًا في كل خطوة.'
-const LEFT_DESC = 'تجربة تشغيل أنظف، أسرع، وأكثر احترافية لنقاط البيع والإدارة اليومية.'
+import logoImg from '../assets/logo'
+
+const HERO_TITLE = 'Your Need Our Next Feature'
+const HERO_SUBTITLE = 'A smarter, faster, and more professional POS experience.'
+const LEFT_DESC = 'Designed for daily operations — intuitive, reliable, and built to scale.'
 const LOADER_ITEMS = [
   'تهيئة بيئة التشغيل الأساسية',
   'تحميل إعدادات المستخدم والصلاحيات',
@@ -19,13 +21,13 @@ export default function SplashScreen() {
         <div className="relative flex flex-col items-center text-center">
           <div className="splash-logo-ring absolute h-56 w-56 rounded-[3rem] border border-[#0f7649]/15" />
           <div className="splash-logo-card relative flex h-40 w-40 items-center justify-center rounded-[2.8rem] border border-emerald-100 bg-white shadow-[0_32px_90px_-45px_rgba(7,89,57,0.65)]">
-            <img src="./Logo MGIVIA.png" alt="MGIVIA POS" className="h-24 w-24 object-contain drop-shadow-[0_18px_30px_rgba(15,118,73,0.22)]" />
+            <img src={logoImg} alt="NEXA POS" className="h-24 w-24 object-contain drop-shadow-[0_18px_30px_rgba(15,118,73,0.22)]" />
           </div>
-          <h1 className="splash-brand mt-9 text-[72px] font-black tracking-tight text-[#0b6d49]">MGIVIA</h1>
+          <h1 className="splash-brand mt-9 text-[72px] font-black tracking-tight text-[#0b6d49]">NEXA</h1>
           <div className="splash-brand-line mt-4 h-1.5 w-36 overflow-hidden rounded-full bg-emerald-100">
             <div className="h-full rounded-full bg-[#00855c]" />
           </div>
-          <p className="splash-brand-sub mt-6 text-sm font-black tracking-[0.45em] text-[#587466]">POINT OF SALE</p>
+          <p className="splash-brand-sub mt-6 text-sm font-black tracking-[0.35em] text-[#587466]">Your Need Our Next Feature</p>
         </div>
       </section>
 
@@ -36,10 +38,10 @@ export default function SplashScreen() {
 
           <div className="relative z-10 w-full max-w-2xl">
             <div className="mx-auto mb-7 flex h-28 w-28 items-center justify-center rounded-[2rem] border border-emerald-100 bg-white shadow-[0_24px_60px_-32px_rgba(15,118,73,0.38)]">
-              <img src="./Logo MGIVIA.png" alt="MGIVIA POS" className="h-16 w-16 object-contain" />
+              <img src={logoImg} alt="NEXA POS" className="h-16 w-16 object-contain" />
             </div>
 
-            <h1 className="text-[64px] font-black tracking-tight text-[#0f7649]">MGIVIA</h1>
+            <h1 className="text-[64px] font-black tracking-tight text-[#0f7649]">NEXA POS</h1>
             <p className="mx-auto mt-6 max-w-xl text-[26px] font-black leading-[1.85] text-[#0a2416]">
               {HERO_TITLE}
               <span className="mt-2 block text-[#5f7698]">{HERO_SUBTITLE}</span>
@@ -57,9 +59,9 @@ export default function SplashScreen() {
               <div className="rounded-[2rem] border border-white/10 bg-white/[0.08] px-6 py-9 sm:px-8 sm:py-10">
                 <div className="mb-8 text-center text-white">
                   <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[1.8rem] bg-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.4)]">
-                    <img src="./Logo MGIVIA.png" alt="MGIVIA POS" className="h-11 w-11 object-contain" />
+                    <img src={logoImg} alt="NEXA POS" className="h-11 w-11 object-contain" />
                   </div>
-                  <h1 className="text-[42px] font-black leading-tight">MGIVIA</h1>
+                  <h1 className="text-[42px] font-black leading-tight">NEXA POS</h1>
                   <p className="mt-3 text-[15px] font-bold leading-relaxed text-emerald-100/90">{LEFT_DESC}</p>
                 </div>
 

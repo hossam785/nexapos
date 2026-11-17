@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { X, Eye, EyeOff, Loader2, UserCheck, LogIn, ShieldCheck, Lock, User2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import logoImg from '../assets/logo'
+import { X, Eye, EyeOff, Loader2, UserCheck, LogIn, ShieldCheck, Lock, User2, ChevronDown } from 'lucide-react'
 
 export default function SwitchAccountModal({ currentUser, onSwitch, onClose }) {
   const [username, setUsername] = useState('')
@@ -7,6 +8,42 @@ export default function SwitchAccountModal({ currentUser, onSwitch, onClose }) {
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const [users, setUsers] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const usernameContainerRef = useRef(null)
+  const passwordInputRef = useRef(null)
+
+  useEffect(() => {
+    async function loadUsers() {
+      try {
+        if (window.mgpos?.db?.getUsers) {
+          const list = await window.mgpos.db.getUsers()
+          if (Array.isArray(list)) {
+            setUsers(list)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load users for switch account:', err)
+      }
+    }
+    loadUsers()
+  }, [])
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (usernameContainerRef.current && !usernameContainerRef.current.contains(event.target)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const filteredUsers = users.filter((u) => {
+    if (u.is_active === 0) return false
+    return (u.username || '').toLowerCase().includes(username.toLowerCase())
+  })
 
   async function handleSwitch(event) {
     event?.preventDefault()
@@ -55,7 +92,7 @@ export default function SwitchAccountModal({ currentUser, onSwitch, onClose }) {
           <div className="hidden bg-[linear-gradient(180deg,#107e54_0%,#0b5a3b_42%,#102447_100%)] p-8 text-white lg:flex lg:flex-col lg:justify-between">
             <div>
               <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-white text-[#11613b] shadow-lg">
-                <img src="./Logo MGIVIA.png" alt="MGIVIA" className="h-9 w-9 object-contain" />
+                <img src={logoImg} alt="NEXA POS" className="h-9 w-9 object-contain" />
               </div>
               <h2 className="text-[36px] font-black leading-tight">تبديل الحساب</h2>
               <p className="mt-3 text-sm font-bold leading-7 text-emerald-100/90">
@@ -82,7 +119,7 @@ export default function SwitchAccountModal({ currentUser, onSwitch, onClose }) {
           <div className="bg-[radial-gradient(circle_at_top_left,#ffffff_0%,#f8fbff_42%,#edf6f1_100%)] p-6 sm:p-8">
             <div className="mb-6 flex items-center justify-between">
               <div className="lg:hidden">
-                <p className="text-xs font-black tracking-[0.22em] text-[#7ea18f]">MGIVIA</p>
+                <p className="text-xs font-black tracking-[0.22em] text-[#7ea18f]">NEXA POS</p>
                 <h2 className="text-2xl font-black text-[#0a2416]">تبديل الحساب</h2>
               </div>
               <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 py-2 text-xs font-black text-[#135c39] shadow-sm lg:inline-flex">
@@ -119,19 +156,80 @@ export default function SwitchAccountModal({ currentUser, onSwitch, onClose }) {
                   <User2 size={15} />
                   اسم المستخدم
                 </label>
-                <div className="relative">
+                <div className="relative" ref={usernameContainerRef}>
                   <User2 size={18} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#7ea18f]" />
                   <input
                     value={username}
                     onChange={(event) => {
                       setUsername(event.target.value)
+                      setShowSuggestions(true)
                       setError('')
                     }}
+                    onFocus={() => setShowSuggestions(true)}
                     autoFocus
                     data-primary-input="true"
                     placeholder="اكتب اسم المستخدم"
-                    className="w-full rounded-[1.4rem] border border-emerald-100 bg-white px-12 py-4 text-sm font-black text-slate-800 shadow-sm outline-none transition focus:border-[#0f7649] focus:ring-4 focus:ring-[#0f7649]/10"
+                    className="w-full rounded-[1.4rem] border border-emerald-100 bg-white pr-12 pl-12 py-4 text-sm font-black text-slate-800 shadow-sm outline-none transition focus:border-[#0f7649] focus:ring-4 focus:ring-[#0f7649]/10"
                   />
+                  {users.length > 0 && (
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowSuggestions((prev) => !prev)}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:text-[#0f7649] hover:bg-slate-50 transition"
+                      title="عرض قائمة المستخدمين"
+                    >
+                      <ChevronDown size={16} className={`transition-transform duration-200 ${showSuggestions ? 'rotate-180 text-[#0f7649]' : ''}`} />
+                    </button>
+                  )}
+
+                  {/* Username Suggestions Popover */}
+                  {showSuggestions && filteredUsers.length > 0 && (
+                    <div className="absolute right-0 left-0 top-full z-50 mt-1.5 max-h-52 overflow-y-auto rounded-2xl border border-emerald-100 bg-white shadow-2xl py-1 text-slate-800 animate-in fade-in slide-in-from-top-2 duration-150">
+                      {filteredUsers.map((u) => {
+                        const isCurrent = Number(u.id) === Number(currentUser?.id)
+                        return (
+                          <div
+                            key={u.id}
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              setUsername(u.username)
+                              setShowSuggestions(false)
+                              setError('')
+                              setTimeout(() => passwordInputRef.current?.focus(), 50)
+                            }}
+                            className={`px-4 py-2.5 flex items-center justify-between cursor-pointer transition-colors border-b border-slate-50 last:border-0 ${
+                              isCurrent ? 'bg-slate-50/70 hover:bg-slate-100' : 'hover:bg-emerald-50/70'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100/70 text-emerald-800 font-bold text-xs">
+                                {u.username?.[0]?.toUpperCase()}
+                              </div>
+                              <div className="text-right">
+                                <span data-no-translate className="text-xs font-black text-slate-800 block leading-tight">{u.username}</span>
+                                {u.name && u.name !== u.username && (
+                                  <span className="text-[10px] text-slate-400 font-bold block">{u.name}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {isCurrent && (
+                                <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-bold">
+                                  الحالي
+                                </span>
+                              )}
+                              <span className={`text-[10px] px-2 py-0.5 rounded-md font-black ${
+                                u.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {u.role === 'admin' ? 'مدير' : 'كاشير'}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -143,6 +241,7 @@ export default function SwitchAccountModal({ currentUser, onSwitch, onClose }) {
                 <div className="relative">
                   <Lock size={18} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#7ea18f]" />
                   <input
+                    ref={passwordInputRef}
                     type={showPass ? 'text' : 'password'}
                     value={password}
                     onChange={(event) => {

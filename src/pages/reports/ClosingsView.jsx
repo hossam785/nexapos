@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Clock, TrendingUp, RotateCcw, DollarSign, Eye, Printer, Download,
   X, CreditCard, Banknote, Users, FileText, AlertTriangle, Calculator, RefreshCw
 } from 'lucide-react'
 import { generateClosingHTML } from '../../utils/receipt'
+import { getCurrentLanguage } from '../../i18n'
 import { canDo } from '../../permissions/frontend'
 
 const fmt = n => Number(n || 0).toFixed(2)
@@ -58,14 +59,21 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
 
   useEffect(() => { loadData() }, [loadData])
 
+  const reopeningRef = useRef(false)
+
   async function handleReopen() {
+    if (reopeningRef.current) return
     if (!reopenReason.trim()) { setReopenError('يرجى كتابة سبب إعادة الفتح'); return }
+    reopeningRef.current = true
     try {
-      await window.mgpos.db.reopenClosing(selected.id, user?.id, reopenReason.trim())
+      // the backend records who reopens the day: the logged-in user (the second argument is not used)
+      await window.mgpos.db.reopenClosing(selected.id, null, reopenReason.trim())
       setShowReopen(false); setReopenReason(''); setShowDetail(false); setSelected(null)
       loadData()
     } catch (e) {
-      setReopenError('حدث خطأ أثناء إعادة الفتح')
+      setReopenError(String(e?.message || '').replace(/^Error invoking remote method '[^']+': (Error: )?/, '') || 'حدث خطأ أثناء إعادة الفتح')
+    } finally {
+      reopeningRef.current = false
     }
   }
 
@@ -141,8 +149,8 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
                       <td className="px-6 py-4 font-black text-slate-700">{fmtDate(c.date)}</td>
                       <td className="px-4 py-4 text-center text-xs font-mono text-slate-500">{c.shift_opened_at ? fmtTime(c.shift_opened_at) : '\u2014'}</td>
                       <td className="px-4 py-4 text-center text-xs font-mono text-slate-500">{c.shift_closed_at ? fmtTime(c.shift_closed_at) : '\u2014'}</td>
-                      <td className="px-4 py-4 text-center text-xs font-bold text-slate-500">{dh}{'\u0633'} {dm}{'\u062F'}</td>
-                      <td className="px-4 py-4 text-center font-bold text-slate-600">{c.closed_by_name || '\u2014'}</td>
+                      <td className="px-4 py-4 text-center text-xs font-bold text-slate-500">{`${dh}${getCurrentLanguage() === 'en' ? 'h' : '\u0633'} ${dm}${getCurrentLanguage() === 'en' ? 'm' : '\u062f'}`}</td>
+                      <td data-no-translate className="px-4 py-4 text-center font-bold text-slate-600">{c.closed_by_name || '\u2014'}</td>
                       <td className="px-4 py-4 text-center font-black text-emerald-800">{fmt(c.total_sales)}</td>
                       <td className="px-4 py-4 text-center font-bold text-slate-600">{fmt(c.expected_cash)}</td>
                       <td className="px-4 py-4 text-center font-bold text-slate-600">{fmt(c.actual_cash)}</td>
@@ -158,15 +166,20 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
                       </td>
                       <td className="px-4 py-4 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => openDetail(c)} className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition flex items-center justify-center" title="تفاصيل">
+                          <button onClick={() => openDetail(c)} className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition flex items-center justify-center" title="تفاصيل" aria-label="تفاصيل الإقفال">
                             <Eye size={14} />
                           </button>
                           <button 
                             onClick={async () => {
                               const html = generateClosingHTML(c, settings);
-                              await window.mgpos.print(html, { silent: settings?.auto_print === '1' });
+                              await window.mgpos.print(html, {
+                                paperSize: settings?.paper_size || '80mm',
+                                printerName: settings?.printer_name || undefined,
+                                documentType: 'receipt',
+                                title: '\u0645\u0639\u0627\u064a\u0646\u0629 \u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0625\u0642\u0641\u0627\u0644',
+                              });
                             }}
-                            className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-600 hover:text-white transition flex items-center justify-center" title="طباعة">
+                            className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-600 hover:text-white transition flex items-center justify-center" title="طباعة" aria-label="طباعة الإقفال">
                             <Printer size={14} />
                           </button>
                         </div>
@@ -200,7 +213,7 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
                       {selected.status === 'closed' ? '\uD83D\uDD12 \u0645\u0642\u0641\u0648\u0644' : '\uD83D\uDD13 \u0623\u0639\u064A\u062F \u0641\u062A\u062D\u0647'}
                     </span>
                   </div>
-                  <button onClick={() => { setShowDetail(false); setSelected(null) }} className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
+                  <button onClick={() => { setShowDetail(false); setSelected(null) }} aria-label="إغلاق التفاصيل" className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
                     <X size={20} />
                   </button>
                 </div>
@@ -208,12 +221,17 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
                   <button 
                     onClick={async () => {
                       const html = generateClosingHTML(selected, settings);
-                      await window.mgpos.print(html, { silent: settings?.auto_print === '1' });
+                      await window.mgpos.print(html, {
+                                paperSize: settings?.paper_size || '80mm',
+                                printerName: settings?.printer_name || undefined,
+                                documentType: 'receipt',
+                                title: '\u0645\u0639\u0627\u064a\u0646\u0629 \u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0625\u0642\u0641\u0627\u0644',
+                              });
                     }}
                     className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black border border-white/10 transition">
                     <Printer size={14} /> {'\u0637\u0628\u0627\u0639\u0629'}
                   </button>
-                  <button className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black border border-white/10 transition">
+                  <button disabled title="التصدير غير متاح حالياً" className="flex items-center gap-1.5 bg-white/10 px-4 py-2 rounded-xl text-xs font-black border border-white/10 transition opacity-40 cursor-not-allowed">
                     <Download size={14} /> {'\u062A\u0635\u062F\u064A\u0631'}
                   </button>
                   {canReopenClosings && selected.status === 'closed' && (
@@ -235,8 +253,8 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <InfoCell label={'\u0648\u0642\u062A \u0627\u0644\u0641\u062A\u062D'} value={selected.shift_opened_at ? fmtTime(selected.shift_opened_at) : '\u2014'} />
                   <InfoCell label={'\u0648\u0642\u062A \u0627\u0644\u0642\u0641\u0644'} value={selected.shift_closed_at ? fmtTime(selected.shift_closed_at) : '\u2014'} />
-                  <InfoCell label={'\u0627\u0644\u0645\u062F\u0629'} value={`${Math.floor((selected.shift_duration_minutes || 0) / 60)}\u0633 ${(selected.shift_duration_minutes || 0) % 60}\u062F`} valueClass="text-emerald-700" />
-                  <InfoCell label={'\u0623\u063A\u0644\u0642 \u0628\u0648\u0627\u0633\u0637\u0629'} value={selected.closed_by_name || '\u2014'} />
+                  <InfoCell label={'\u0627\u0644\u0645\u062F\u0629'} value={`${Math.floor((selected.shift_duration_minutes || 0) / 60)}${getCurrentLanguage() === 'en' ? 'h' : '\u0633'} ${(selected.shift_duration_minutes || 0) % 60}${getCurrentLanguage() === 'en' ? 'm' : '\u062f'}`} valueClass="text-emerald-700" />
+                  <InfoCell label={'\u0623\u063A\u0644\u0642 \u0628\u0648\u0627\u0633\u0637\u0629'} value={<span data-no-translate>{selected.closed_by_name || '\u2014'}</span>} />
                 </div>
               </div>
 
@@ -250,7 +268,13 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
                   <InfoCell label={'\u0639\u062F\u062F \u0627\u0644\u0641\u0648\u0627\u062A\u064A\u0631'} value={selected.invoices_count || 0} />
                   <InfoCell label={'\u0645\u062A\u0648\u0633\u0637 \u0627\u0644\u0641\u0627\u062A\u0648\u0631\u0629'} value={`${fmt(selected.avg_invoice)} ${currency}`} />
                   <InfoCell label={'\u0627\u0644\u062E\u0635\u0648\u0645\u0627\u062A'} value={`${fmt(selected.discount_total)} ${currency}`} valueClass="text-amber-600" />
-                  <InfoCell label={'\u0627\u0644\u0645\u0631\u062A\u062C\u0639\u0627\u062A'} value={`${fmt(selected.returns_total)} (${selected.returns_count || 0})`} valueClass="text-red-600" />
+                  <InfoCell label={'إجمالي المرتجعات'} value={`${fmt(selected.returns_total)} (${selected.returns_count || 0})`} valueClass="text-red-600" />
+                  {Number(selected.cash_returns_total || 0) > 0 && (
+                    <InfoCell label={'مرتجع نقدي (من الدرج)'} value={`${fmt(selected.cash_returns_total)} ${currency}`} valueClass="text-rose-700" />
+                  )}
+                  {Number(selected.credit_returns_total || 0) > 0 && (
+                    <InfoCell label={'مرتجع آجل (على الحساب)'} value={`${fmt(selected.credit_returns_total)} ${currency}`} valueClass="text-amber-700" />
+                  )}
                   <InfoCell label={'\u0627\u0644\u0645\u0635\u0631\u0648\u0641\u0627\u062A'} value={`${fmt(selected.expenses_total)} (${selected.expenses_count || 0})`} valueClass="text-red-600" />
                   <InfoCell label={'\u0635\u0627\u0641\u064A \u0627\u0644\u0645\u0628\u064A\u0639\u0627\u062A'} value={`${fmt(selected.net_sales)} ${currency}`} valueClass="text-green-700 text-lg" />
                 </div>
@@ -311,8 +335,8 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <InfoCell label={'\u0627\u0644\u0639\u0645\u0644\u0627\u0621'} value={selected.customers_count || 0} />
                   <InfoCell label={'\u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A \u0627\u0644\u0645\u0628\u0627\u0639\u0629'} value={selected.items_count || 0} />
-                  <InfoCell label={'\u0623\u0643\u062B\u0631 \u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A'} value={selected.top_product_name || '\u2014'} valueClass="text-green-700" />
-                  <InfoCell label={'\u0623\u0642\u0644 \u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A'} value={selected.least_product_name || '\u2014'} valueClass="text-red-600" />
+                  <InfoCell label={'\u0623\u0643\u062B\u0631 \u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A'} value={<span data-no-translate>{selected.top_product_name || '\u2014'}</span>} valueClass="text-green-700" />
+                  <InfoCell label={'\u0623\u0642\u0644 \u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A'} value={<span data-no-translate>{selected.least_product_name || '\u2014'}</span>} valueClass="text-red-600" />
                 </div>
               </div>
 
@@ -320,7 +344,7 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
               {selected.notes && (
                 <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><FileText size={12} /> {'\u0645\u0644\u0627\u062D\u0638\u0627\u062A'}</p>
-                  <p className="text-sm text-slate-600 font-bold leading-relaxed">{selected.notes}</p>
+                  <p data-no-translate className="text-sm text-slate-600 font-bold leading-relaxed">{selected.notes}</p>
                 </div>
               )}
 
@@ -329,9 +353,9 @@ export default function ClosingsView({ from, to, currency, user, settings }) {
                 <div className="bg-amber-50 rounded-2xl p-5 border-2 border-amber-200">
                   <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3">{'\uD83D\uDD13 \u0645\u0639\u0644\u0648\u0645\u0627\u062A \u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u0641\u062A\u062D'}</p>
                   <div className="space-y-2 text-sm">
-                    <p className="text-slate-600"><span className="font-black text-slate-800">{'\u0623\u0639\u064A\u062F \u0628\u0648\u0627\u0633\u0637\u0629:'}</span> {selected.reopened_by_name || '\u2014'}</p>
+                    <p className="text-slate-600"><span className="font-black text-slate-800">{'\u0623\u0639\u064A\u062F \u0628\u0648\u0627\u0633\u0637\u0629:'}</span> <span data-no-translate>{selected.reopened_by_name || '\u2014'}</span></p>
                     <p className="text-slate-600"><span className="font-black text-slate-800">{'\u0627\u0644\u0648\u0642\u062A:'}</span> {selected.reopened_at ? `${fmtDate(selected.reopened_at)} ${fmtTime(selected.reopened_at)}` : '\u2014'}</p>
-                    <p className="text-slate-600"><span className="font-black text-slate-800">{'\u0627\u0644\u0633\u0628\u0628:'}</span> {selected.reopen_reason || '\u2014'}</p>
+                    <p className="text-slate-600"><span className="font-black text-slate-800">{'\u0627\u0644\u0633\u0628\u0628:'}</span> <span data-no-translate>{selected.reopen_reason || '\u2014'}</span></p>
                   </div>
                 </div>
               )}

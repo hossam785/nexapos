@@ -1,22 +1,48 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   LayoutDashboard, TrendingUp, CreditCard, RotateCcw,
   Users, ShoppingCart, Package, RefreshCw,
   DollarSign, FileText, Tag, BarChart3,
   AlertTriangle, ArrowUpRight, ArrowDownRight, ArrowDownCircle,
-  Banknote, Clock, ChevronRight, Eye, Download, Search, CheckCircle, Calendar, User, Filter, X, Printer, Pencil, Lock, Wallet, Check, FileSpreadsheet
+  Banknote, Clock, ChevronRight, Eye, Download, Search, CheckCircle, CheckCircle2, Calendar, User, Filter, X, Printer, Pencil, Lock, Wallet, Check, FileSpreadsheet,
+  ShoppingBag, Landmark, Activity, Percent, Flame, Receipt,
+  Building2, Sparkles, Star, Pin, Layers, ArrowLeft, ArrowLeftRight, PieChart, UserCheck, MonitorSmartphone
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { generateReceiptHTML } from '../../utils/receipt'
 import ClosingsView from './ClosingsView'
+import ProductsAnalyticsView from './ProductsAnalyticsView'
+import CashiersView from './CashiersView'
+import PaymentsView from './PaymentsView'
+import WarehousesView from './WarehousesView'
+import CustomersView from './CustomersView'
+import ReturnsView from './ReturnsView'
+import TaxInvoicesView from './TaxInvoicesView'
+import ExpensesView from './ExpensesView'
+import StoreSyncView from './StoreSyncView'
 import CustomerModal from '../customers/CustomerModal'
-import { canDo, canViewPage, hasFullManagerPermissions } from '../../permissions/frontend'
-function today() { return new Date().toISOString().slice(0, 10) }
+import InvoiceDetailModal from './InvoiceDetailModal'
+import { canDo, canViewPage, hasFullManagerPermissions, shouldMaskProfit, shouldMaskCostPrice } from '../../permissions/frontend'
+import { escapeHtml } from '../../utils/htmlEscape'
+import { safeRows } from '../../utils/spreadsheetSafe'
+
+function formatLocalDate(d) {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+function today() { return formatLocalDate(new Date()) }
 function daysAgo(n) {
-  const d = new Date(); d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return formatLocalDate(d)
 }
 function fmt(n) { return Number(n || 0).toFixed(2) }
+// the message the user sees: the Electron prefix removed, or the Arabic fallback
+function cleanError(e, fallback) {
+  return String(e?.message || '').replace(/^Error invoking remote method '[^']+': (Error: )?/, '') || fallback
+}
 const parseDate = d => new Date(typeof d === 'string' ? (d.includes(' ') && !d.includes('Z') ? d.replace(' ', 'T') + 'Z' : d) : d)
 function fmtDate(s) {
   return parseDate(s).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -24,51 +50,336 @@ function fmtDate(s) {
 function fmtTime(s) {
   return parseDate(s).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
-function LineChart({ data, color = '#15803d', height = 140 }) {
+function fillTrendDates(rawTrend = [], fromDate, toDate) {
+  if (!fromDate || !toDate) return rawTrend || []
+  const start = new Date(fromDate + 'T00:00:00')
+  const end = new Date(toDate + 'T00:00:00')
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return rawTrend || []
+
+  const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24))
+  if (diffDays === 0) {
+    if (rawTrend && rawTrend.length > 0) return rawTrend
+    return [{ date: fromDate, total: 0, cogs: 0, profit: 0 }]
+  }
+
+  if (diffDays <= 90) {
+    const map = new Map()
+    for (const item of (rawTrend || [])) {
+      const dStr = typeof item.date === 'string' ? item.date.slice(0, 10) : ''
+      if (dStr) map.set(dStr, item)
+    }
+
+    const filled = []
+    const curr = new Date(start)
+    while (curr <= end) {
+      const y = curr.getFullYear()
+      const m = String(curr.getMonth() + 1).padStart(2, '0')
+      const d = String(curr.getDate()).padStart(2, '0')
+      const dateStr = `${y}-${m}-${d}`
+
+      if (map.has(dateStr)) {
+        filled.push(map.get(dateStr))
+      } else {
+        filled.push({ date: dateStr, total: 0, cogs: 0, profit: 0 })
+      }
+      curr.setDate(curr.getDate() + 1)
+    }
+    return filled
+  }
+
+  return rawTrend || []
+}
+
+function LineChart({ data, color = '#059669', height = 155, currency = 'ج.م' }) {
+  const [hoveredIdx, setHoveredIdx] = useState(null)
+
   if (!data || data.length === 0) return (
-    <div className="flex items-center justify-center h-36 text-slate-300 text-sm">لا توجد بيانات</div>
+    <div className="flex flex-col items-center justify-center h-40 text-slate-400 gap-2">
+      <BarChart3 size={24} className="opacity-25" />
+      <span className="text-xs font-bold">لا توجد بيانات أرباح مسجلة في هذه الفترة</span>
+    </div>
   )
-  const W = 520, H = height
-  const vals = data.map(d => d.total)
-  const maxV = Math.max(...vals, 1)
-  const pts = data.map((d, i) => {
-    const x = data.length === 1 ? W / 2 : (i / (data.length - 1)) * W
-    const y = H - (d.total / maxV) * (H - 20) - 10
+
+  const chartData = data.slice(-14)
+
+  // Single Day View: Beautiful Executive Performance Spotlight
+  if (chartData.length === 1) {
+    const single = chartData[0]
+    const salesVal = Number(single.total || 0)
+    const profitVal = Number(single.profit ?? single.total ?? 0)
+    const cogsVal = Number(single.cogs ?? Math.max(0, salesVal - profitVal))
+    const marginPct = salesVal > 0 ? ((profitVal / salesVal) * 100) : 0
+    const dt = new Date(single.date)
+    const formattedDate = !isNaN(dt.getTime())
+      ? dt.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' })
+      : single.date
+
+    return (
+      <div className="py-2 animate-fadeIn">
+        <div className="bg-gradient-to-l from-emerald-50/70 via-slate-50/80 to-white p-4 sm:p-5 rounded-2xl border border-emerald-100/90 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0 w-full md:w-auto">
+            <div className="w-12 h-12 rounded-xl bg-emerald-800 text-white flex items-center justify-center shadow-xs flex-shrink-0">
+              <Landmark size={22} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-slate-500">صافي أرباح اليوم المحققة</span>
+                <span className="text-[10px] font-mono font-bold bg-emerald-100 text-emerald-950 px-2 py-0.5 rounded-md">
+                  {formattedDate}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2 mt-1 flex-wrap">
+                <span className="text-2xl sm:text-3xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+                  {Math.round(profitVal).toLocaleString()}
+                </span>
+                <span className="text-xs font-bold text-slate-400">{currency}</span>
+                <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
+                  profitVal >= 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200/60' : 'bg-rose-100 text-rose-800 border border-rose-200/60'
+                }`}>
+                  هامش {marginPct.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full md:w-72 space-y-2 bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+              <span>إجمالي المبيعات:</span>
+              <span className="font-mono text-slate-900" dir="ltr">{Math.round(salesVal).toLocaleString()} {currency}</span>
+            </div>
+            <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden flex">
+              <div
+                style={{ width: `${Math.min(100, Math.max(0, (cogsVal / (salesVal || 1)) * 100))}%` }}
+                className="bg-amber-400 h-full transition-all duration-500"
+                title={`تكلفة البضاعة: ${Math.round(cogsVal).toLocaleString()}`}
+              />
+              <div
+                style={{ width: `${Math.min(100, Math.max(0, (profitVal / (salesVal || 1)) * 100))}%` }}
+                className="bg-emerald-600 h-full transition-all duration-500"
+                title={`صافي الربح: ${Math.round(profitVal).toLocaleString()}`}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] font-bold">
+              <span className="flex items-center gap-1 text-slate-500">
+                <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                التكلفة: {Math.round(cogsVal).toLocaleString()}
+              </span>
+              <span className="flex items-center gap-1 text-emerald-700">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block" />
+                الربح: {Math.round(profitVal).toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Multi-day Trend View: Premium SVG Spline Chart with Stable Interactive Tooltip & Zero Jitter
+  const W = 560, H = height
+  const vals = chartData.map(d => Number(d.profit ?? d.total ?? 0))
+  const maxV = Math.max(...vals, 100)
+  const minV = Math.min(...vals, 0)
+  const range = maxV - minV || 1
+
+  const padLeft = 60
+  const padRight = 30
+  const chartWidth = W - padLeft - padRight
+  const colWidth = chartWidth / (chartData.length - 1 || 1)
+
+  const pts = chartData.map((d, i) => {
+    const x = padLeft + (i / (chartData.length - 1 || 1)) * chartWidth
+    const y = H - 30 - ((Number(d.profit ?? d.total ?? 0) - minV) / range) * (H - 56)
     return [x, y]
   })
-  const polyline = pts.map(([x, y]) => `${x},${y}`).join(' ')
-  const areaPath = `M${pts[0][0]},${H} ` + pts.map(([x, y]) => `L${x},${y}`).join(' ') + ` L${pts.at(-1)[0]},${H} Z`
+
+  let curvePath = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i === 0 ? i : i - 1]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[i + 2] || p2
+    const cp1x = p1[0] + (p2[0] - p0[0]) / 6
+    const cp1y = p1[1] + (p2[1] - p0[1]) / 6
+    const cp2x = p2[0] - (p3[0] - p1[0]) / 6
+    const cp2y = p2[1] - (p3[1] - p1[1]) / 6
+    curvePath += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`
+  }
+  const areaPath = `${curvePath} L${pts.at(-1)[0]},${H - 22} L${pts[0][0]},${H - 22} Z`
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }}>
-      <defs>
-        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaPath} fill="url(#chartGrad)" />
-      <polyline points={polyline} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-      {pts.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="4" fill={color} />
-      ))}
-      {data.map((d, i) => {
-        const x = data.length === 1 ? W / 2 : (i / (data.length - 1)) * W
-        return <text key={i} x={x} y={H} fontSize="10" textAnchor="middle" fill="#94a3b8">{d.date?.slice(5)}</text>
-      })}
-    </svg>
+    <div className="relative pt-2 pb-1 select-none">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full overflow-visible"
+        style={{ height }}
+        onMouseLeave={() => setHoveredIdx(null)}
+      >
+        <defs>
+          <linearGradient id="profitGradNew" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+
+        {/* Milestone reference lines with clean separated y-axis numbers */}
+        <line x1={padLeft - 5} y1="14" x2={W - padRight} y2="14" stroke="#e2e8f0" strokeDasharray="4 4" strokeWidth="1" />
+        <text x={padLeft - 12} y="17" fontSize="9" textAnchor="end" fill="#94a3b8" fontWeight="700" fontFamily="monospace">
+          {Math.round(maxV).toLocaleString()}
+        </text>
+
+        <line x1={padLeft - 5} y1={(H - 30) / 2 + 7} x2={W - padRight} y2={(H - 30) / 2 + 7} stroke="#f1f5f9" strokeDasharray="4 4" strokeWidth="1" />
+        <text x={padLeft - 12} y={(H - 30) / 2 + 10} fontSize="8" textAnchor="end" fill="#cbd5e1" fontWeight="700" fontFamily="monospace">
+          {Math.round(maxV / 2).toLocaleString()}
+        </text>
+
+        <line x1={padLeft - 5} y1={H - 30} x2={W - padRight} y2={H - 30} stroke="#e2e8f0" strokeDasharray="4 4" strokeWidth="1" />
+        <text x={padLeft - 12} y={H - 27} fontSize="9" textAnchor="end" fill="#94a3b8" fontWeight="700" fontFamily="monospace">
+          0
+        </text>
+
+        {/* Gradient fill & Smooth Spline Line */}
+        <path d={areaPath} fill="url(#profitGradNew)" />
+        <path d={curvePath} fill="none" stroke={color} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Dots rendering (Declarative, no CSS scale jump / zero jitter) */}
+        {pts.map(([x, y], i) => {
+          const val = Number(chartData[i]?.profit ?? chartData[i]?.total ?? 0)
+          const isHovered = hoveredIdx === i
+          const isPeak = val === maxV && val > 0
+          const hasValue = val > 0
+
+          return (
+            <g key={`pt-${i}`} className="pointer-events-none">
+              {/* Outer halo ring on hover */}
+              {isHovered && (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r="9"
+                  fill={color}
+                  fillOpacity="0.22"
+                />
+              )}
+              {/* Main circle */}
+              <circle
+                cx={x}
+                cy={y}
+                r={isHovered ? 5.5 : (isPeak ? 4.5 : (hasValue ? 3.5 : 2))}
+                fill={hasValue || isHovered ? '#ffffff' : '#cbd5e1'}
+                stroke={isHovered ? '#047857' : (isPeak ? '#047857' : (hasValue ? color : '#94a3b8'))}
+                strokeWidth={isHovered ? 2.5 : (isPeak ? 2.5 : (hasValue ? 2 : 1.2))}
+              />
+            </g>
+          )
+        })}
+
+        {/* Invisible full-height hit columns - 100% stable hover, zero flicker */}
+        {pts.map(([x], i) => (
+          <rect
+            key={`hit-${i}`}
+            x={x - colWidth / 2}
+            y={0}
+            width={colWidth}
+            height={H - 15}
+            fill="transparent"
+            className="cursor-pointer"
+            onMouseEnter={() => setHoveredIdx(i)}
+          />
+        ))}
+
+        {/* Interactive Guide Line and Tooltip */}
+        {hoveredIdx !== null && pts[hoveredIdx] && (() => {
+          const [hx, hy] = pts[hoveredIdx]
+          const d = chartData[hoveredIdx]
+          const hVal = Number(d?.profit ?? d?.total ?? 0)
+          const dt = new Date(d.date)
+          const formattedDate = !isNaN(dt.getTime())
+            ? `${dt.getDate()}/${dt.getMonth() + 1}`
+            : d.date
+
+          // Tooltip position constrained inside chart bounds
+          const tipX = Math.max(65, Math.min(W - 65, hx))
+          const tipY = hy > 45 ? hy - 24 : hy + 22
+
+          return (
+            <g className="pointer-events-none">
+              {/* Vertical Guide Line */}
+              <line
+                x1={hx}
+                y1={14}
+                x2={hx}
+                y2={H - 30}
+                stroke={color}
+                strokeWidth="1.2"
+                strokeDasharray="3 3"
+                strokeOpacity="0.6"
+              />
+
+              {/* Tooltip Card */}
+              <rect
+                x={tipX - 48}
+                y={tipY - 11}
+                width="96"
+                height="22"
+                rx="6"
+                fill="#0f172a"
+                fillOpacity="0.94"
+              />
+              <text
+                x={tipX}
+                y={tipY + 4}
+                textAnchor="middle"
+                fill="#ffffff"
+                fontSize="9.5"
+                fontWeight="700"
+                fontFamily="monospace"
+              >
+                {formattedDate} ◂ {Math.round(hVal).toLocaleString()} {currency}
+              </text>
+            </g>
+          )
+        })()}
+
+        {/* X-axis date labels */}
+        {chartData.map((d, i) => {
+          if (chartData.length > 10 && i % 2 !== 0 && i !== chartData.length - 1) return null
+          const x = pts[i][0]
+          return (
+            <text key={`date-${i}`} x={x} y={H - 8} fontSize="9" textAnchor="middle" fill="#64748b" fontWeight="700" fontFamily="monospace">
+              {d.date?.slice(5)}
+            </text>
+          )
+        })}
+      </svg>
+    </div>
   )
 }
-const DONUT_COLORS = ['#15803dff', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#6366f1', '#a78bfa']
-function DonutChart({ data }) {
+
+const DONUT_COLORS = ['#059669', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b', '#10b981']
+
+function DonutChart({ data, currency = '' }) {
   if (!data || data.length === 0) return (
-    <div className="flex items-center justify-center h-36 text-slate-300 text-sm">لا توجد بيانات</div>
+    <div className="flex flex-col items-center justify-center h-40 text-slate-400 gap-2">
+      <Tag size={24} className="opacity-25" />
+      <span className="text-xs font-bold">لا توجد مبيعات مصنفة في هذه الفترة</span>
+    </div>
   )
-  const total = data.reduce((s, d) => s + d.total, 0)
+  const total = data.reduce((s, d) => s + Number(d.total || 0), 0)
+  if (total <= 0) return (
+    <div className="flex flex-col items-center justify-center h-40 text-slate-400 gap-2">
+      <Tag size={24} className="opacity-25" />
+      <span className="text-xs font-bold">لا توجد مبيعات في هذه الفترة</span>
+    </div>
+  )
+
+  const R = 62, CX = 80, CY = 80, innerR = 44
+  const isSingle = data.length === 1 || (Number(data[0].total || 0) / total) >= 0.999
+
   let cumAngle = -90
-  const R = 60, CX = 80, CY = 80
   const slices = data.map((d, i) => {
-    const pct = d.total / total
+    const val = Number(d.total || 0)
+    const pct = val / total
     const angle = pct * 360
     const startAngle = (cumAngle * Math.PI) / 180
     cumAngle += angle
@@ -76,241 +387,217 @@ function DonutChart({ data }) {
     const x1 = CX + R * Math.cos(startAngle), y1 = CY + R * Math.sin(startAngle)
     const x2 = CX + R * Math.cos(endAngle), y2 = CY + R * Math.sin(endAngle)
     const large = angle > 180 ? 1 : 0
-    return { path: `M${CX},${CY} L${x1},${y1} A${R},${R} 0 ${large} 1 ${x2},${y2} Z`, color: DONUT_COLORS[i % DONUT_COLORS.length], label: d.category, pct: (pct * 100).toFixed(1) }
+    return {
+      path: `M${CX},${CY} L${x1.toFixed(2)},${y1.toFixed(2)} A${R},${R} 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`,
+      color: DONUT_COLORS[i % DONUT_COLORS.length],
+      label: d.category || 'عام',
+      amount: val,
+      pct: (pct * 100).toFixed(1)
+    }
   })
 
   return (
-    <div className="flex items-center gap-6">
-      <svg viewBox="0 0 160 160" className="w-36 h-36 flex-shrink-0">
-        <circle cx={CX} cy={CY} r={R} fill="white" stroke="#f1f5f9" strokeWidth="1" />
-        {slices.map((s, i) => <path key={i} d={s.path} fill={s.color} />)}
-        <circle cx={CX} cy={CY} r={R * 0.55} fill="white" />
-      </svg>
-      <div className="flex-1 space-y-1.5">
+    <div className="flex flex-col sm:flex-row items-center gap-5">
+      <div className="relative w-36 h-36 flex-shrink-0 flex items-center justify-center">
+        <svg viewBox="0 0 160 160" className="w-36 h-36 transform -rotate-90">
+          {isSingle ? (
+            <circle cx={CX} cy={CY} r={R} fill={slices[0].color} />
+          ) : (
+            slices.map((s, i) => (
+              <path key={i} d={s.path} fill={s.color} className="transition-opacity hover:opacity-85 cursor-pointer" />
+            ))
+          )}
+          <circle cx={CX} cy={CY} r={innerR} fill="white" />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+          <span className="text-[9px] font-black text-slate-400 leading-tight">إجمالي الفئات</span>
+          <span className="text-xs font-black text-slate-800 font-mono leading-tight" dir="ltr">
+            {Math.round(total).toLocaleString()}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex-1 w-full space-y-1.5 max-h-44 overflow-y-auto pr-1">
         {slices.map((s, i) => (
-          <div key={i} className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
-              <span className="text-slate-600 truncate max-w-[100px]">{s.label}</span>
+          <div key={i} className="flex items-center justify-between text-xs p-1.5 rounded-lg hover:bg-slate-50 transition border border-transparent hover:border-slate-100">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-2xs" style={{ background: s.color }} />
+              <span className="text-slate-700 font-bold truncate text-xs">{s.label}</span>
             </div>
-            <span className="font-bold text-slate-700">{s.pct}%</span>
+            <div className="flex items-center gap-2.5 flex-shrink-0 text-left" dir="ltr">
+              <span className="text-slate-400 text-[11px] font-mono">{Math.round(s.amount).toLocaleString()}</span>
+              <span className="font-black text-slate-800 font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded-md min-w-[40px] text-center">
+                {s.pct}%
+              </span>
+            </div>
           </div>
         ))}
       </div>
     </div>
   )
 }
-function BarChart({ data }) {
+
+function BarChart({ data, currency = 'ج.م' }) {
   if (!data || data.length === 0) return (
-    <div className="flex items-center justify-center h-48 text-slate-300 text-sm">لا توجد بيانات</div>
+    <div className="flex flex-col items-center justify-center h-44 text-slate-400 gap-2">
+      <TrendingUp size={24} className="opacity-25" />
+      <span className="text-xs font-bold">لا توجد مبيعات مسجلة في هذه الفترة</span>
+    </div>
   )
-  
+
   const chartData = data.slice(-7)
-  const maxV = Math.max(...chartData.map(d => d.total), 1)
+  const maxV = Math.max(...chartData.map(d => Number(d.total || 0)), 100)
+  const gridSteps = [1, 0.66, 0.33]
 
-  return (
-    <div className="flex items-end justify-around gap-2 h-44 pb-2 px-4">
-      {chartData.map((d, i) => {
-        const height = (d.total / maxV) * 100 
-        const day = new Date(d.date).toLocaleDateString('en-GB', { weekday: 'short' })
-        return (
-          <div key={i} className="flex flex-col items-center group flex-1">
-            <span className="text-[11px] font-black text-emerald-900 mb-2 transition-transform group-hover:scale-110">{Math.round(d.total)}</span>
-            <div 
-              className="w-8 bg-emerald-600 rounded-t-xl transition-all duration-700 ease-out shadow-lg shadow-emerald-600/20 group-hover:bg-emerald-500 group-hover:shadow-emerald-500/40"
-              style={{ height: `${height}%`, minHeight: '4px' }}
-            />
-            <span className="text-[11px] text-slate-400 mt-4 font-bold">{day}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-function StatCard({ icon: Icon, label, value, color = 'blue', sub, onClick }) {
-  const colors = {
-    blue:   { bg: 'bg-emerald-50',   icon: 'text-emerald-800',   val: 'text-emerald-900' },
-    green:  { bg: 'bg-green-50',  icon: 'text-green-700',  val: 'text-green-800' },
-    amber:  { bg: 'bg-amber-50',  icon: 'text-amber-700',  val: 'text-amber-800' },
-    red:    { bg: 'bg-red-50',    icon: 'text-red-600',    val: 'text-red-700' },
-    violet: { bg: 'bg-violet-50', icon: 'text-violet-700', val: 'text-violet-800' },
-    slate:  { bg: 'bg-slate-100', icon: 'text-slate-600',  val: 'text-slate-800' },
-  }
-  const c = colors[color] || colors.blue
-  return (
-    <div onClick={onClick} className={`${c.bg} rounded-2xl p-4 flex items-center gap-4 border border-slate-100 shadow-sm transition-all hover:scale-[1.02] ${onClick ? 'cursor-pointer hover:shadow-md hover:brightness-95 active:scale-95' : ''}`}>
-      <div className={`w-11 h-11 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-sm ${c.icon}`}>
-        <Icon size={22} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-slate-500 font-bold mb-0.5 leading-tight">{label}</p>
-        <p className={`text-base sm:text-lg font-black ${c.val} break-words leading-tight`} dir="ltr" style={{ textAlign: 'right' }}>{value}</p>
-        {sub && <p className="text-[10px] text-slate-400 mt-0.5 font-medium leading-tight">{sub}</p>}
-      </div>
-    </div>
-  )
-}
-function InvoiceDetailModal({ invoice, onClose, currency, settings }) {
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    window.mgpos.db.getInvoiceItems(invoice.id).then(d => { setItems(d || []); setLoading(false) })
-  }, [invoice.id])
-
-  async function handlePrint() {
-    const html = generateReceiptHTML({
-      invoice,
-      items: items.map(it => ({ ...it, name: it.product_name })),
-      customer: invoice.customer_id ? { name: invoice.customer_name, phone: invoice.customer_phone } : null,
-      settings
-    })
-    await window.mgpos.print(html, { silent: settings?.auto_print === '1' })
+  const arabicDays = {
+    'Sun': 'الأحد',
+    'Mon': 'الإثنين',
+    'Tue': 'الثلاثاء',
+    'Wed': 'الأربعاء',
+    'Thu': 'الخميس',
+    'Fri': 'الجمعة',
+    'Sat': 'السبت'
   }
 
-  const renderCustomerInfo = () => {
-    const name = invoice.customer_name
-    const phone = invoice.customer_phone
-    if (name && phone) return `${name} (${phone})`
-    if (name) return name
-    if (phone) return phone
-    return 'عميل نقدي'
-  }
+  // Single Day View: Spotlight Card
+  if (chartData.length === 1) {
+    const single = chartData[0]
+    const val = Number(single.total || 0)
+    const dt = new Date(single.date)
+    const dayEn = !isNaN(dt.getTime()) ? dt.toLocaleDateString('en-US', { weekday: 'short' }) : ''
+    const dayName = arabicDays[dayEn] || ''
+    const formattedDate = !isNaN(dt.getTime())
+      ? dt.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' })
+      : single.date
 
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" dir="rtl">
-      <div role="dialog" aria-modal="true" className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-fadeIn border border-white/20">
-        {/* Modal Header */}
-        <div className={`px-8 py-6 border-b flex items-center justify-between ${
-          invoice.total < 0 ? 'border-red-100 bg-red-50/50' : 'border-slate-100 bg-emerald-50/50'
-        }`}>
-          <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center shadow-lg ${
-              invoice.total < 0 ? 'bg-red-600 shadow-red-600/30' : 'bg-emerald-800 shadow-emerald-800/30'
-            }`}>
-              <FileText size={22} />
+    return (
+      <div className="py-2.5 animate-fadeIn">
+        <div className="bg-gradient-to-r from-emerald-50/70 via-slate-50/80 to-white p-4 sm:p-5 rounded-2xl border border-emerald-100/90 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-emerald-800 text-white flex items-center justify-center shadow-xs flex-shrink-0">
+              <TrendingUp size={22} />
             </div>
             <div>
-              <h2 className={`text-xl font-black ${invoice.total < 0 ? 'text-red-700' : 'text-slate-800'}`}>
-                {invoice.total < 0 ? 'فاتورة مرتجع' : 'فاتورة مبيعات'} #SL-{String(invoice.id).padStart(3, '0')}
-              </h2>
-              <p className="text-xs text-slate-500 mt-1 font-bold">{fmtDate(invoice.created_at)}  {fmtTime(invoice.created_at)}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={handlePrint}
-              disabled={loading}
-              className={`flex items-center gap-2 text-white px-6 py-3 rounded-2xl text-sm font-black shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 ${
-                invoice.total < 0 
-                  ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/20' 
-                  : 'bg-emerald-800 hover:bg-emerald-900 shadow-emerald-800/20'
-              }`}
-            >
-              <Printer size={18} /> طباعة
-            </button>
-            <button onClick={onClose} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white shadow-sm text-slate-400 hover:text-red-500 transition-colors border border-slate-100">
-              <X size={24} />
-            </button>
-          </div>
-        </div>
-
-        {/* Modal Body */}
-        <div className="p-8 overflow-auto custom-scrollbar">
-          <div className="grid grid-cols-2 gap-6 mb-8">
-            <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100 shadow-inner group">
-              <p className="text-[10px] text-slate-400 font-black mb-1.5 uppercase tracking-widest flex items-center gap-1.5">
-                <User size={12} className="text-emerald-800" /> هويّة العميل
-              </p>
-              <p className="font-black text-slate-800 text-lg leading-tight">{renderCustomerInfo()}</p>
-            </div>
-            <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100 shadow-inner group">
-              <p className="text-[10px] text-slate-400 font-black mb-1.5 uppercase tracking-widest flex items-center gap-1.5">
-                <Tag size={12} className="text-emerald-800" /> الكاشير المسؤول
-              </p>
-              <p className="font-black text-slate-800 text-lg leading-tight">{invoice.cashier_name || 'مدير النظام'}</p>
-            </div>
-          </div>
-
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-slate-400 font-black text-[10px] uppercase border-b border-slate-100 pb-4">
-                <th className="text-right py-4 pr-3">الصن</th>
-                <th className="text-center py-4">الكمية</th>
-                <th className="text-center py-4">السعر</th>
-                <th className="text-left py-4 pl-3">الإجمالي</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {loading ? (
-                <tr><td colSpan={4} className="py-24 text-center text-slate-300"> <RefreshCw className="animate-spin-slow mx-auto mb-4" size={32} /> جاري التحميل...</td></tr>
-              ) : (
-                items.map((it, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 transition">
-                    <td className="py-5 pr-3 font-bold text-slate-800 text-base">{it.product_name}</td>
-                    <td className="py-5 text-center">
-                      <span className="bg-emerald-50 text-emerald-900 px-4 py-1.5 rounded-xl font-black text-xs">{it.quantity}</span>
-                    </td>
-                    <td className="py-5 text-center text-slate-500 font-mono italic text-xs font-bold">{fmt(it.price)}</td>
-                    <td className="py-5 text-left pl-3 font-black text-emerald-900 text-base font-mono">{fmt(it.total)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Modal Footer (Summary) */}
-        {(() => {
-          const subtotalProducts = items.reduce((s, it) => s + ((it.price || 0) * (it.quantity || 1)), 0);
-          const discountAmt = Number(invoice.discount) || 0;
-          const afterDiscount = subtotalProducts - discountAmt;
-          const showTax = settings?.tax_enabled === '1';
-          const taxRate = parseFloat(settings?.tax_rate || '0');
-          const taxAmount = showTax ? afterDiscount * (taxRate / 100) : 0;
-          
-          return (
-            <div className="px-10 py-8 bg-slate-50 border-t border-slate-100 space-y-4">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-400 font-black uppercase tracking-widest">إجمالي المنتجات</span>
-                <span className="font-bold text-slate-600 font-mono text-lg">{fmt(subtotalProducts)} {currency}</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-slate-500">إجمالي مبيعات اليوم</span>
+                <span className="text-[10px] font-mono font-bold bg-emerald-100 text-emerald-950 px-2 py-0.5 rounded-md">
+                  {formattedDate}
+                </span>
               </div>
-              {discountAmt > 0 && (
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-red-400 font-black uppercase tracking-widest">إجمالي الخصم</span>
-                  <span className="font-black text-red-500 font-mono text-lg">-{fmt(discountAmt)} {currency}</span>
-                </div>
-              )}
-              {showTax && taxAmount !== 0 && (
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400 font-black uppercase tracking-widest">ضريبة القيمة المضافة ({taxRate}%)</span>
-                  <span className="font-bold text-slate-600 font-mono text-lg">{taxAmount > 0 ? '+' : ''}{fmt(taxAmount)} {currency}</span>
-                </div>
-              )}
-              <div className="flex justify-between items-center py-6 border-t border-slate-200">
-                <span className="font-black text-slate-800 text-2xl tracking-tighter uppercase italic">مجموع الفاتورة</span>
-                <div className="flex flex-col items-end">
-                   <span className="text-4xl font-black text-emerald-900 tracking-tighter leading-none italic">{fmt(invoice.total)} <span className="text-sm font-bold opacity-40 mr-1">{currency}</span></span>
-                   <span className={`text-[11px] font-black mt-3 tracking-widest px-3 py-1 rounded-lg border ${
-                     invoice.payment_method === 'credit' || (invoice.payment_method === 'split' && Number(invoice.credit_amount || 0) > 0)
-                       ? 'text-amber-600 bg-amber-50 border-amber-100'
-                       : 'text-green-600 bg-green-50 border-green-100 uppercase'
-                   }`}>
-                     {invoice.payment_method === 'split'
-                       ? `تقسيم مبلغ — نقدي ${fmt(invoice.cash_amount || 0)} / إلكتروني ${fmt(invoice.card_amount || 0)} / آجل ${fmt(invoice.credit_amount || 0)}`
-                       : invoice.payment_method === 'credit'
-                       ? 'آجل — لم يتم الدفع' 
-                       : `مدفوع بالكامل  ${invoice.payment_method === 'cash' ? 'كاش' : invoice.payment_method === 'card' ? 'بطاقة' : invoice.payment_method}`}
-                   </span>
-                </div>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl sm:text-3xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+                  {Math.round(val).toLocaleString()}
+                </span>
+                <span className="text-xs font-bold text-slate-400">{currency}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-3 py-2 rounded-xl">
+            <CheckCircle2 size={16} className="text-emerald-700" />
+            <span>بيانات المبيعات والعمليات محدثة لحظياً</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative pt-6 pb-2">
+      <div className="absolute inset-x-0 top-6 bottom-8 flex flex-col justify-between pointer-events-none opacity-30">
+        {gridSteps.map((step, idx) => (
+          <div key={idx} className="border-b border-dashed border-slate-300 w-full flex items-center justify-between text-[9px] text-slate-400 font-mono">
+            <span>{Math.round(maxV * step).toLocaleString()}</span>
+          </div>
+        ))}
+        <div className="border-b border-slate-300 w-full text-[9px] text-slate-400 font-mono">
+          <span>0</span>
+        </div>
+      </div>
+
+      <div className="relative z-10 flex items-end justify-around gap-2 h-44 px-2">
+        {chartData.map((d, i) => {
+          const val = Number(d.total || 0)
+          const height = Math.max(6, (val / maxV) * 100)
+          const dt = new Date(d.date)
+          const dayEn = !isNaN(dt.getTime()) ? dt.toLocaleDateString('en-US', { weekday: 'short' }) : ''
+          const dayName = arabicDays[dayEn] || dayEn
+          const dateFormatted = !isNaN(dt.getTime()) ? `${dt.getDate()}/${dt.getMonth() + 1}` : d.date
+
+          return (
+            <div key={i} className="flex flex-col items-center group flex-1 max-w-[52px]">
+              <div className="mb-1.5 opacity-90 group-hover:opacity-100 group-hover:-translate-y-0.5 transition-all">
+                <span className={`text-[10px] font-black font-mono px-1.5 py-0.2 rounded-md border shadow-2xs whitespace-nowrap ${
+                  val > 0 ? 'bg-emerald-50 text-emerald-950 border-emerald-200/80' : 'bg-slate-50 text-slate-400 border-slate-200/60'
+                }`}>
+                  {Math.round(val).toLocaleString()}
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-t-xl overflow-hidden h-32 flex items-end">
+                <div
+                  className={`w-full rounded-t-xl transition-all duration-500 ease-out shadow-xs ${
+                    val > 0
+                      ? 'bg-gradient-to-t from-emerald-800 to-emerald-500 group-hover:from-emerald-700 group-hover:to-teal-400'
+                      : 'bg-slate-200/60'
+                  }`}
+                  style={{ height: `${height}%` }}
+                />
+              </div>
+              <div className="mt-2 text-center">
+                <span className="block text-[11px] font-black text-slate-700 leading-tight">{dayName}</span>
+                <span className="block text-[9px] text-slate-400 font-mono leading-tight">{dateFormatted}</span>
               </div>
             </div>
           )
-        })()}
+        })}
       </div>
     </div>
   )
 }
+function StatCard({ icon: Icon, label, value, color = 'blue', sub, onClick, delta }) {
+  const colors = {
+    blue:   { bg: 'bg-emerald-50/50 hover:bg-emerald-50',   iconBg: 'bg-emerald-100 text-emerald-800',   val: 'text-emerald-950', border: 'border-emerald-200/60' },
+    green:  { bg: 'bg-emerald-50/60 hover:bg-emerald-50',  iconBg: 'bg-emerald-100 text-emerald-800',  val: 'text-emerald-900', border: 'border-emerald-200/80' },
+    amber:  { bg: 'bg-amber-50/50 hover:bg-amber-50',    iconBg: 'bg-amber-100 text-amber-800',    val: 'text-amber-950', border: 'border-amber-200/60' },
+    red:    { bg: 'bg-rose-50/50 hover:bg-rose-50',      iconBg: 'bg-rose-100 text-rose-700',      val: 'text-rose-950', border: 'border-rose-200/60' },
+    violet: { bg: 'bg-purple-50/50 hover:bg-purple-50',  iconBg: 'bg-purple-100 text-purple-800',  val: 'text-purple-950', border: 'border-purple-200/60' },
+    slate:  { bg: 'bg-slate-50 hover:bg-slate-100/70',   iconBg: 'bg-slate-200 text-slate-700',   val: 'text-slate-800', border: 'border-slate-200' },
+  }
+  const c = colors[color] || colors.blue
+  return (
+    <div
+      onClick={onClick}
+      className={`relative ${c.bg} rounded-2xl p-4 flex items-center gap-3.5 border ${c.border} shadow-2xs transition-all duration-200 ${
+        onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5 active:scale-98 group' : ''
+      }`}
+    >
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-2xs ${c.iconBg}`}>
+        <Icon size={20} strokeWidth={2.2} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-1">
+          <p className="text-xs text-slate-500 font-bold leading-tight">{label}</p>
+          {onClick && (
+            <span className="text-[10px] text-emerald-700 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+              عرض <ArrowUpRight size={11} />
+            </span>
+          )}
+        </div>
+        <p className={`text-base sm:text-lg font-black font-mono ${c.val} break-words leading-tight mt-0.5`} dir="ltr" style={{ textAlign: 'right' }}>
+          {value}
+        </p>
+        <div className="flex items-center justify-between gap-2 mt-1">
+          {sub && <p className="text-[10px] text-slate-400 font-bold truncate leading-tight">{sub}</p>}
+          {delta !== undefined && (
+            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md ${delta >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'}`}>
+              {delta >= 0 ? `+${delta}%` : `${delta}%`}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function InvoicesListModal({ from, to, currency, onClose }) {
   const [localFrom, setLocalFrom] = useState(from)
   const [localTo, setLocalTo] = useState(to)
@@ -318,23 +605,30 @@ function InvoicesListModal({ from, to, currency, onClose }) {
   const [invoices, setInvoices] = useState([])
   const [settings, setSettings] = useState({})
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [selectedInv, setSelectedInv] = useState(null)
 
   useEffect(() => {
+    // an answer to an older date range must not replace the newer one
+    let stale = false
     setLoading(true)
     Promise.all([
       window.mgpos.reports.getFilteredInvoices(localFrom, localTo, 'all', 'all'),
       window.mgpos.db.getSettings()
     ]).then(([d, s]) => {
+      if (stale) return
       setInvoices(d || [])
       setSettings(s || {})
       setLoading(false)
     }).catch(e => {
+      if (stale) return
       console.error('InvoicesListModal load error:', e)
       setInvoices([])
       setSettings({})
+      setLoadError(cleanError(e, 'تعذر تحميل الفواتير، حاول مرة تانية'))
       setLoading(false)
     })
+    return () => { stale = true }
   }, [localFrom, localTo])
 
   const paymentLabels = {
@@ -346,12 +640,15 @@ function InvoicesListModal({ from, to, currency, onClose }) {
   }
 
   function handlePrintList() {
-    const storeName  = String(settings?.store_name || '').trim() || 'MGIVIA'
-    const storePhone = settings.store_phone   || ''
-    const storeAddr  = settings.store_address || ''
-    const creg       = settings.commercial_register || ''
-    const taxNum     = settings.tax_number    || ''
-    const curr       = currency || 'ج.م'
+    // every value typed by a person goes into the print window escaped (a crafted name must not run script there)
+    const storeName  = escapeHtml(String(settings?.store_name || '').trim() || 'NEXA POS')
+    const storePhone = escapeHtml(settings.store_phone   || '')
+    const storeAddr  = escapeHtml(settings.store_address || '')
+    const creg       = escapeHtml(settings.commercial_register || '')
+    const taxNum     = escapeHtml(settings.tax_number    || '')
+    const curr       = escapeHtml(currency || 'ج.م')
+    const fromLabel  = escapeHtml(localFrom)
+    const toLabel    = escapeHtml(localTo)
     const fmt2 = n => Number(n).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
     const totalRevenue = invoices.filter(i => i.total > 0).reduce((s, i) => s + i.total, 0)
@@ -371,15 +668,15 @@ function InvoicesListModal({ from, to, currency, onClose }) {
       const dt = parseInvDate(inv.created_at)
       const dateStr = dt.toLocaleDateString('en-GB')
       const timeStr = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })
-      const pLabel  = paymentLabels[inv.payment_method] || inv.payment_method
+      const pLabel  = escapeHtml(paymentLabels[inv.payment_method] || inv.payment_method)
       const rowColor = isReturn ? '#fff5f5' : '#fff'
       const amtColor = isReturn ? '#dc2626' : '#15803d'
       return [
         '<tr style="background:' + rowColor + ';border-bottom:1px solid #e2e8f0">',
-        '<td>SL-' + String(inv.id).padStart(3, '0') + '</td>',
-        '<td>' + (inv.customer_name || 'عميل نقدي') + (inv.customer_phone ? '<br><span style="font-size:11px;color:#94a3b8">' + inv.customer_phone + '</span>' : '') + '</td>',
+        '<td>#' + inv.id + '</td>',
+        '<td>' + escapeHtml(inv.customer_name || 'عميل نقدي') + (inv.customer_phone ? '<br><span style="font-size:11px;color:#94a3b8">' + escapeHtml(inv.customer_phone) + '</span>' : '') + '</td>',
         '<td>' + pLabel + '</td>',
-        '<td>' + (inv.cashier_name || 'مدير النظام') + '</td>',
+        '<td>' + escapeHtml(inv.cashier_name || 'مدير النظام') + '</td>',
         '<td>'
           + '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px">'
             + '<span style="font-size:11px;color:#64748b;font-weight:700">التاريخ</span>'
@@ -410,7 +707,7 @@ function InvoicesListModal({ from, to, currency, onClose }) {
       : ''
 
     const html = '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">'
-      + '<title>سجل الفواتير ' + localFrom + ' - ' + localTo + '</title>'
+      + '<title>سجل الفواتير ' + fromLabel + ' - ' + toLabel + '</title>'
       + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Segoe UI",Arial,sans-serif;background:#fff;color:#1e293b;font-size:13px}.page{padding:32px;max-width:1000px;margin:0 auto}table{width:100%;border-collapse:collapse}thead th{background:#15803d;color:#fff;padding:10px 12px;font-size:12px;font-weight:800;text-align:right}td{padding:9px 12px;vertical-align:middle}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}thead th{background:#15803d !important;color:#fff !important}}</style>'
       + '</head><body><div class="page">'
       + '<div style="text-align:center;margin-bottom:28px;border-bottom:3px solid #15803d;padding-bottom:20px">'
@@ -419,7 +716,7 @@ function InvoicesListModal({ from, to, currency, onClose }) {
       + badgesHtml
       + '</div>'
       + '<div style="display:flex;justify-content:space-between;margin-bottom:20px">'
-      + '<div><div style="font-size:12px;color:#64748b;font-weight:700">فترة التقرير</div><div style="font-size:16px;font-weight:900;color:#15803d">' + localFrom + ' → ' + localTo + '</div></div>'
+      + '<div><div style="font-size:12px;color:#64748b;font-weight:700">فترة التقرير</div><div style="font-size:16px;font-weight:900;color:#15803d">' + fromLabel + ' → ' + toLabel + '</div></div>'
       + '<div><div style="font-size:12px;color:#64748b;font-weight:700">عدد الفواتير</div><div style="font-size:16px;font-weight:900;color:#15803d">' + invoices.length + ' فاتورة</div></div>'
       + '</div>'
       + '<table><thead><tr>'
@@ -452,7 +749,7 @@ function InvoicesListModal({ from, to, currency, onClose }) {
                 <input 
                   type="date"
                   value={localFrom}
-                  onChange={(e) => setLocalFrom(e.target.value)}
+                  aria-label="من تاريخ" onChange={(e) => setLocalFrom(e.target.value)}
                   className="bg-transparent border-none text-sm font-bold text-slate-800 outline-none w-32 cursor-pointer"
                 />
               </div>
@@ -462,7 +759,7 @@ function InvoicesListModal({ from, to, currency, onClose }) {
                 <input 
                   type="date"
                   value={localTo}
-                  onChange={(e) => setLocalTo(e.target.value)}
+                  aria-label="إلى تاريخ" onChange={(e) => setLocalTo(e.target.value)}
                   className="bg-transparent border-none text-sm font-bold text-slate-800 outline-none w-32 cursor-pointer"
                 />
               </div>
@@ -478,13 +775,16 @@ function InvoicesListModal({ from, to, currency, onClose }) {
             >
               <Printer size={16} /> طباعة / PDF
             </button>
-            <button onClick={onClose} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white shadow-sm text-slate-400 hover:text-red-500 transition-colors border border-slate-200">
+            <button aria-label="إغلاق التقرير" onClick={onClose} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white shadow-sm text-slate-400 hover:text-red-500 transition-colors border border-slate-200">
               <X size={24} />
             </button>
           </div>
         </div>
 
         <div className="flex-1 overflow-auto custom-scrollbar p-8">
+          {loadError && (
+            <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">{loadError}</div>
+          )}
           {loading ? (
             <div className="flex items-center justify-center h-full text-slate-400 animate-pulse font-black text-xs tracking-widest uppercase italic gap-3"><RefreshCw size={20} className="animate-spin" /> جاري تحميل البيانات...</div>
           ) : invoices.length === 0 ? (
@@ -508,10 +808,39 @@ function InvoicesListModal({ from, to, currency, onClose }) {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {invoices.map((inv) => {
-                    const isReturn = inv.total < 0
+                    const isCreditNote = Number(inv.total) < 0 || inv.is_return || inv.original_invoice_id
+                    const isFullyReturned = inv.status === 'returned'
+                    const isPartiallyReturned = inv.status === 'partially_returned' || (Number(inv.returned_total) > 0 && !isFullyReturned)
                     return (
-                      <tr key={inv.id} className={`hover:bg-slate-50 transition-colors ${isReturn ? 'bg-red-50/20' : ''}`}>
-                        <td className="px-6 py-4 font-black text-slate-600">SL-{String(inv.id).padStart(3, '0')}</td>
+                      <tr key={inv.id} className={`hover:bg-slate-50 transition-colors ${isCreditNote ? 'bg-red-50/20' : ''}`}>
+                        <td className="px-6 py-4 font-black text-slate-600">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className={`rounded-md px-2.5 py-1 text-xs font-black border font-mono ${
+                              isCreditNote
+                                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            }`}>
+                              #{inv.daily_invoice_number || inv.id}
+                            </span>
+                            {isCreditNote ? (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
+                                إشعار دائن
+                              </span>
+                            ) : isFullyReturned ? (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-red-100 text-red-800 border border-red-200">
+                                مرتجع بالكامل
+                              </span>
+                            ) : isPartiallyReturned ? (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                                مرتجع جزئي
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                                مكتملة
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="font-bold text-slate-800">{inv.customer_name || 'عميل كاشير (نقدي)'}</div>
                           {inv.customer_phone && <div className="text-xs text-slate-400 mt-1">{inv.customer_phone}</div>}
@@ -544,14 +873,20 @@ function InvoicesListModal({ from, to, currency, onClose }) {
                           <div dir="ltr" className="flex items-center gap-1.5 justify-end mt-1 text-slate-400"><Clock size={12}/> {fmtTime(inv.created_at)}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className={`font-black font-mono text-base ${isReturn ? 'text-red-600' : 'text-emerald-900'}`}>{fmt(inv.total)}</div>
+                          <div className={`font-black font-mono text-base ${isCreditNote ? 'text-red-600' : 'text-emerald-900'}`}>{fmt(Math.abs(inv.total))} {currency}</div>
+                          {isPartiallyReturned && Number(inv.returned_total) > 0 && (
+                            <div className="text-[11px] font-bold text-amber-700 mt-1 flex flex-col gap-0.5">
+                              <span>مسترد: {fmt(inv.returned_total)} {currency}</span>
+                              <span className="text-emerald-700 font-black">الصافي: {fmt(inv.net_total ?? (inv.total - inv.returned_total))} {currency}</span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => setSelectedInv(inv)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-colors text-xs font-black"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-colors text-xs font-black shadow-sm"
                           >
-                            <Eye size={14} /> عرض
+                            <Eye size={14} /> تفاصيل الفاتورة
                           </button>
                         </td>
                       </tr>
@@ -576,35 +911,368 @@ function InvoicesListModal({ from, to, currency, onClose }) {
     </div>
   )
 }
-// Sales View Component
-function SalesView({ dateFrom, dateTo, onSetDates, currency, settings }) {
-  const [subTab, setSubTab]       = useState('invoices') 
+
+// ── Quick Set / Update Cost Price Modal (Retroactive / Future Scope) ──
+function SetCostPriceModal({ product, currency, onClose, onSaved }) {
+  const [costInput, setCostInput] = useState(() => {
+    const pCost = Number(product.cost_price || product.masterCost || 0)
+    return pCost > 0 ? String(pCost) : ''
+  })
+  const [applyRetroactive, setApplyRetroactive] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  // a second click while the save is running must not save again
+  const savingRef = useRef(false)
+
+  const numericCost = parseFloat(costInput) || 0
+  const numericSell = Number(product.sell_price || 0)
+  const unitProfit = numericSell - numericCost
+  const marginPercent = numericSell > 0 ? ((unitProfit / numericSell) * 100) : 0
+  const soldQty = Number(product.qty || product.total_qty || 0)
+  const totalProfit = unitProfit * soldQty
+
+  async function handleSave() {
+    if (savingRef.current) return
+    if (isNaN(numericCost) || numericCost < 0) {
+      setError('يرجى إدخال سعر تكلفة صحيح وغير سالب')
+      return
+    }
+    savingRef.current = true
+    setError('')
+    setSaving(true)
+    try {
+      const res = await window.mgpos.db.updateProductCostPrice(product.id, numericCost, applyRetroactive)
+      if (res && res.error) {
+        setError(res.error)
+        setSaving(false)
+        savingRef.current = false
+        return
+      }
+      if (onSaved) {
+        await onSaved(numericCost, applyRetroactive)
+      }
+      onClose()
+    } catch (err) {
+      console.error('Error updating cost price:', err)
+      setError(String(err?.message || '').replace(/^Error invoking remote method '[^']+': (Error: )?/, '') || 'حدث خطأ أثناء حفظ سعر التكلفة')
+      setSaving(false)
+      savingRef.current = false
+    }
+  }
+
+  const presets = [
+    { label: 'هامش 20%', percent: 20 },
+    { label: 'هامش 30%', percent: 30 },
+    { label: 'هامش 40%', percent: 40 },
+    { label: 'هامش 50%', percent: 50 },
+  ]
+
+  function applyPreset(marginPct) {
+    if (numericSell > 0) {
+      const calculatedCost = Math.max(0, numericSell * (1 - marginPct / 100))
+      setCostInput(calculatedCost % 1 === 0 ? String(calculatedCost) : calculatedCost.toFixed(2))
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-lg w-full overflow-hidden text-right animate-slideUp">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 p-6 text-white relative">
+          <button
+            onClick={onClose}
+            aria-label="إغلاق نافذة سعر التكلفة"
+            className="absolute top-5 left-5 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          >
+            <X size={18} />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-white/15 backdrop-blur-md text-white border border-white/20">
+              <Pencil size={22} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black tracking-tight">تحديد سعر التكلفة وحساب الأرباح</h3>
+              <p className="text-xs text-emerald-100 font-bold mt-0.5">ضبط تكلفة الصنف وإعادة احتساب الهوامش الربحية</p>
+            </div>
+          </div>
+          
+          <div className="mt-4 pt-4 border-t border-white/15 flex items-center justify-between text-xs">
+            <div className="font-bold text-white/95">
+              <span className="text-emerald-200 ml-1">الصنف:</span>
+              <span className="font-black text-white text-sm">{product.name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {product.barcode && (
+                <span className="px-2 py-0.5 rounded-lg bg-black/20 font-mono text-[11px] text-white/80">
+                  {product.barcode}
+                </span>
+              )}
+              <span className="px-2.5 py-0.5 rounded-lg bg-white/20 font-mono font-black text-white text-xs">
+                سعر البيع: {fmt(product.sell_price)} {currency}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-5">
+          {error && (
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
+              <AlertTriangle size={16} className="shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Cost Price Input */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="cost-price-input" className="text-xs font-black text-slate-700">
+                سعر التكلفة الجديد للقطعة ({currency})
+              </label>
+              {numericSell > 0 && (
+                <span className="text-[11px] text-slate-400 font-bold">
+                  سعر البيع الحالي: {fmt(numericSell)} {currency}
+                </span>
+              )}
+            </div>
+
+            <div className="relative">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                id="cost-price-input" value={costInput}
+                onChange={e => setCostInput(e.target.value)}
+                placeholder="0.00"
+                autoFocus
+                className="w-full h-14 px-4 text-center font-mono font-black text-2xl text-slate-800 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none transition-all shadow-inner"
+              />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 pointer-events-none">
+                {currency}
+              </span>
+            </div>
+
+            {/* Margin Shortcut Presets */}
+            {numericSell > 0 && (
+              <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-bold text-slate-400 ml-1">تحديد سريع:</span>
+                {presets.map(p => (
+                  <button
+                    key={p.percent}
+                    type="button"
+                    onClick={() => applyPreset(p.percent)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-black bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200/80 transition-colors"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Dynamic Live Profit Preview */}
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/70 space-y-2.5">
+            <div className="text-xs font-black text-slate-700 flex items-center justify-between">
+              <span>معاينة الأرباح الناتجة فوراً:</span>
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
+                marginPercent >= 30 ? 'bg-emerald-100 text-emerald-800' :
+                marginPercent >= 15 ? 'bg-amber-100 text-amber-800' :
+                marginPercent > 0 ? 'bg-orange-100 text-orange-800' : 'bg-rose-100 text-rose-700'
+              }`}>
+                هامش الربح: {marginPercent.toFixed(1)}%
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="bg-white p-3 rounded-xl border border-slate-200/60 shadow-2xs">
+                <div className="text-[11px] text-slate-400 font-bold">ربح القطعة الواحدة</div>
+                <div className={`text-base font-black font-mono mt-0.5 ${unitProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {fmt(unitProfit)} <span className="text-xs font-normal text-slate-500">{currency}</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-xl border border-slate-200/60 shadow-2xs">
+                <div className="text-[11px] text-slate-400 font-bold">
+                  إجمالي ربح الفترة ({soldQty} {product.unit || 'قطعة'})
+                </div>
+                <div className={`text-base font-black font-mono mt-0.5 ${totalProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {fmt(totalProfit)} <span className="text-xs font-normal text-slate-500">{currency}</span>
+                </div>
+              </div>
+            </div>
+
+            {numericCost > numericSell && (
+              <div className="text-[11px] text-rose-600 font-bold flex items-center gap-1.5 bg-rose-50 p-2 rounded-lg border border-rose-200">
+                <AlertTriangle size={13} className="shrink-0" />
+                تنبيه: سعر التكلفة أعلى من سعر البيع، وستكون العمليات بهامش خسارة.
+              </div>
+            )}
+          </div>
+
+          {/* Scope Selector Options (Retroactive vs Future Only) */}
+          <div className="space-y-2.5">
+            <span className="text-xs font-black text-slate-700 block">
+              نطاق تطبيق سعر التكلفة:
+            </span>
+
+            {/* Option A: Retroactive (Recommended) */}
+            <div
+              onClick={() => setApplyRetroactive(true)}
+              className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3 ${
+                applyRetroactive
+                  ? 'border-emerald-500 bg-emerald-50/40 shadow-xs'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+                applyRetroactive ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'
+              }`}>
+                {applyRetroactive && <Check size={12} strokeWidth={3} />}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-xs text-slate-800">
+                    تطبيق بأثر رجعي على المبيعات السابقة
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800">
+                    موصى به ⭐
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-bold mt-1 leading-relaxed">
+                  تحديث تكلفة جميع فواتير المبيعات السابقة غير المسعرة لهذا الصنف، وإعادة احتساب الأرباح التاريخية في التقارير بدقة محاسبية تامة.
+                </p>
+                {product.zero_cost_qty > 0 && (
+                  <div className="mt-1 text-[10px] font-bold text-emerald-700">
+                    ✓ سيتم تصحيح تكلفة {product.zero_cost_qty} قطعة تم بيعها سابقاً بدون تكلفة
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Option B: Future Only */}
+            <div
+              onClick={() => setApplyRetroactive(false)}
+              className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3 ${
+                !applyRetroactive
+                  ? 'border-emerald-500 bg-emerald-50/40 shadow-xs'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+                !applyRetroactive ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'
+              }`}>
+                {!applyRetroactive && <Check size={12} strokeWidth={3} />}
+              </div>
+              <div className="flex-1">
+                <span className="font-black text-xs text-slate-800">
+                  تطبيق من الآن فصاعداً فقط
+                </span>
+                <p className="text-[11px] text-slate-500 font-bold mt-1 leading-relaxed">
+                  الحفاظ على الفواتير والمبيعات السابقة كما هي، وتطبيق التكلفة الجديدة على عمليات البيع القادمة فقط. ملاحظة: الأسطر اللي اتباعت من غير تكلفة مسجلة بتاخد التكلفة الحالية للصنف في تقارير الربح.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="px-5 py-2.5 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-200 transition-colors"
+          >
+            إلغاء
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-2.5 rounded-xl font-black text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
+          >
+            {saving ? (
+              <>
+                <RefreshCw size={14} className="animate-spin" />
+                جاري الحفظ والاعتماد...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={15} />
+                حفظ واعتماد التكلفة
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Sales View Component (Enhanced with 7 sub-reports)
+function SalesView({ dateFrom, dateTo, onSetDates, currency, settings, user, initialSubTab = 'invoices', initialMethod = 'all' }) {
+  const isProfitMasked = shouldMaskProfit(user)
+  const isCostMasked = shouldMaskCostPrice(user)
+  const [subTab, setSubTab]       = useState(initialSubTab) 
   const [cashierId, setCashierId] = useState('all')
-  const [method, setMethod]       = useState('all')
-  const [period, setPeriod]       = useState('custom')
+  const [method, setMethod]       = useState(initialMethod)
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch]       = useState('')
+  const [invPage, setInvPage]     = useState(1)
+  const [invPageSize, setInvPageSize] = useState(50)
+  const [profitSort, setProfitSort] = useState('profit') // 'profit' | 'sales' | 'margin'
+  const [costModalProduct, setCostModalProduct] = useState(null)
   
   const [users, setUsers]         = useState([])
   const [data, setData]           = useState([])
   const [loading, setLoading]     = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 150)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  useEffect(() => {
+    setInvPage(1)
+  }, [subTab, cashierId, method, search, invPageSize])
   const [selectedInv, setSelectedInv] = useState(null)
   const [selectedCashierLog, setSelectedCashierLog] = useState(null)
+  const [loadError, setLoadError] = useState('')
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportProgress, setExportProgress] = useState(0)
 
+  useEffect(() => {
+    if (initialSubTab) setSubTab(initialSubTab)
+  }, [initialSubTab])
+
+  useEffect(() => {
+    if (initialMethod) setMethod(initialMethod)
+  }, [initialMethod])
+
+  // each load gets a number; only the newest one may write the screen (a slow old answer must not win)
+  const loadSeq = useRef(0)
   const loadData = useCallback(async () => {
+    const seq = ++loadSeq.current
+    setLoading(true)
+    setLoadError('')
     try {
       let d = []
-      if (subTab === 'invoices') {
+      if (['invoices', 'cashiers', 'hourly', 'tax'].includes(subTab)) {
         d = await window.mgpos.reports.getFilteredInvoices(dateFrom, dateTo, cashierId, method)
-      } else if (subTab === 'items') {
+      } else if (['items', 'profitability'].includes(subTab)) {
         d = await window.mgpos.reports.getSalesByItem(dateFrom, dateTo, cashierId)
       } else if (subTab === 'category') {
         d = await window.mgpos.reports.getSalesByCategory(dateFrom, dateTo)
       }
+      if (seq !== loadSeq.current) return
       setData(d || [])
     } catch (err) {
+      if (seq !== loadSeq.current) return
       console.error('SalesView load error:', err)
       setData([])
+      setLoadError(cleanError(err, 'تعذر تحميل بيانات المبيعات، حاول مرة تانية'))
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
   }, [subTab, dateFrom, dateTo, cashierId, method])
 
@@ -614,15 +1282,15 @@ function SalesView({ dateFrom, dateTo, onSetDates, currency, settings }) {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Build cashier rows from invoices data
-  const rows = (() => {
-    if (subTab !== 'invoices') return []
+  // ── Cashier rows calculation ──
+  const cashierRows = useMemo(() => {
+    if (!['invoices', 'cashiers'].includes(subTab)) return []
     const map = {}
     for (const inv of data) {
       const name = inv.cashier_name || 'مدير النظام'
       if (!map[name]) map[name] = { name, count: 0, cash: 0, card: 0, credit: 0, total: 0 }
       map[name].count += 1
-      map[name].total += inv.total || 0
+      map[name].total += Number(inv.total || 0)
       if (inv.payment_method === 'split') {
         map[name].cash += Number(inv.cash_amount || 0)
         map[name].card += Number(inv.card_amount || 0)
@@ -632,35 +1300,200 @@ function SalesView({ dateFrom, dateTo, onSetDates, currency, settings }) {
       else if (inv.payment_method === 'credit') map[name].credit += Number(inv.credit_amount || (inv.total - inv.paid) || 0)
     }
     return Object.values(map)
-  })()
+  }, [data, subTab])
 
-  // Period management
-  const handlePeriodChange = (val) => {
-    setPeriod(val)
-    if (val === 'custom') return
-    const now = today()
-    let f = now, t = now
-    if (val === 'yesterday') f = daysAgo(1), t = daysAgo(1)
-    else if (val === '7days') f = daysAgo(7), t = now
-    else if (val === '30days') f = daysAgo(30), t = now
-    onSetDates(f, t)
-  }
+  // ── Filtered Invoices for Invoices SubTab ──
+  const filteredInvoices = useMemo(() => {
+    if (subTab !== 'invoices' && subTab !== 'tax') return data
+    return data.filter(inv => {
+      if (subTab === 'tax' && Number(inv.tax || 0) <= 0) return false
+      if (search) {
+        const q = search.toLowerCase()
+        const idStr = String(inv.id || '')
+        const dailyStr = String(inv.daily_invoice_number || '')
+        const cName = (inv.customer_name || '').toLowerCase()
+        if (!idStr.includes(q) && !dailyStr.includes(q) && !cName.includes(q)) return false
+      }
+      return true
+    })
+  }, [data, subTab, search])
 
-  function exportData(type = 'xlsx') {
-    if (!data.length) return
-    const sheet = XLSX.utils.json_to_sheet(data)
-    const book = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(book, sheet, 'Report')
-    const fileName = `report-${subTab}-${new Date().toISOString().slice(0,10)}.${type}`
-    XLSX.writeFile(book, fileName)
+  const totalInvPages = Math.max(1, Math.ceil(filteredInvoices.length / invPageSize))
+  const pagedInvoices = useMemo(() => {
+    const start = (invPage - 1) * invPageSize
+    return filteredInvoices.slice(start, start + invPageSize)
+  }, [filteredInvoices, invPage, invPageSize])
+
+  // ── Hourly Sales Distribution ──
+  const hourlyData = useMemo(() => {
+    if (subTab !== 'hourly') return []
+    const hours = Array.from({ length: 24 }, (_, h) => ({
+      hour: h,
+      label: `${h}:00`,
+      timeRange: `${String(h).padStart(2, '0')}:00 - ${String((h + 1) % 24).padStart(2, '0')}:00`,
+      orders: 0,
+      total: 0,
+      cash: 0,
+      card: 0
+    }))
+    for (const inv of data) {
+      if (!inv.created_at) continue
+      const h = parseDate(inv.created_at).getHours()
+      if (hours[h]) {
+        hours[h].orders += 1
+        hours[h].total += Number(inv.total || 0)
+        if (inv.payment_method === 'split') {
+          hours[h].cash += Number(inv.cash_amount || 0)
+          hours[h].card += Number(inv.card_amount || 0)
+        } else if (inv.payment_method === 'cash') {
+          hours[h].cash += Number(inv.cash_amount || inv.paid || 0)
+        } else if (inv.payment_method === 'card') {
+          hours[h].card += Number(inv.card_amount || inv.paid || 0)
+        }
+      }
+    }
+    return hours
+  }, [data, subTab])
+
+  const peakHour = useMemo(() => {
+    if (!hourlyData.length) return null
+    return [...hourlyData].sort((a, b) => b.total - a.total)[0]
+  }, [hourlyData])
+
+  // ── Profitability Data ──
+  const profitabilityRows = useMemo(() => {
+    if (subTab !== 'profitability') return []
+    const list = data.map(item => {
+      const qty = Number(item.total_qty || item.quantity || 0)
+      const revenue = Number(item.total_sales || item.total || 0)
+      const masterCost = Number(item.cost_price || 0)
+      const actualCost = item.total_cost !== undefined ? Number(item.total_cost || 0) : masterCost * qty
+      const zeroCostQty = Number(item.zero_cost_qty || 0)
+      const hasNoCost = masterCost <= 0
+      const hasUnpricedSales = zeroCostQty > 0 || (hasNoCost && qty > 0)
+      
+      const cost = actualCost
+      const profit = revenue - cost
+      const margin = revenue > 0 ? (profit / revenue) * 100 : 0
+      return {
+        ...item,
+        qty,
+        revenue,
+        cost,
+        profit,
+        margin,
+        masterCost,
+        hasNoCost,
+        hasUnpricedSales,
+        zeroCostQty
+      }
+    })
+    if (profitSort === 'profit') return list.sort((a, b) => b.profit - a.profit)
+    if (profitSort === 'sales') return list.sort((a, b) => b.revenue - a.revenue)
+    if (profitSort === 'margin') return list.sort((a, b) => b.margin - a.margin)
+    return list
+  }, [data, subTab, profitSort])
+
+  // ── Export to Excel (Chunked & Formatted for Large Datasets) ──
+  async function exportData(type = 'xlsx') {
+    if (!data.length || isExporting) return
+    setIsExporting(true)
+    setExportProgress(0)
+
+    try {
+      let rowsToExport = []
+      let sheetName = 'Sales_Report'
+
+      if (subTab === 'hourly') {
+        sheetName = 'Hourly_Sales'
+        rowsToExport = (hourlyData || []).map(h => ({
+          'الساعة': h.hour,
+          'عدد الفواتير': h.orders,
+          'إجمالي المبيعات': Number(h.total || 0).toFixed(2),
+          'المحصّل كاش': Number(h.cash || 0).toFixed(2),
+          'المحصّل بطاقة': Number(h.card || 0).toFixed(2)
+        }))
+      } else if (subTab === 'profitability') {
+        sheetName = 'Product_Profitability'
+        rowsToExport = profitabilityRows.map(r => ({
+          'اسم المنتج': r.name,
+          'الكمية المباعة': r.qty,
+          'إجمالي المبيعات': r.revenue.toFixed(2),
+          'إجمالي التكلفة': isCostMasked ? '***' : r.cost.toFixed(2),
+          'صافي الربح': isProfitMasked ? '***' : r.profit.toFixed(2),
+          'هامش الربح %': isProfitMasked ? '***' : r.margin.toFixed(1) + '%'
+        }))
+      } else if (subTab === 'items') {
+        sheetName = 'Sales_By_Item'
+        rowsToExport = (data || []).map((item, idx) => ({
+          'م': idx + 1,
+          'اسم المنتج': item.name,
+          'الباركود': item.barcode || '—',
+          'الوحدة': item.unit || 'قطعة',
+          'الكمية المباعة': Number(item.total_qty || 0),
+          'إجمالي المبيعات': Number(item.total_sales || 0).toFixed(2),
+          'سعر التكلفة': isCostMasked ? '***' : Number(item.cost_price || 0).toFixed(2),
+          'سعر البيع': Number(item.sell_price || 0).toFixed(2),
+          'عدد الفواتير': Number(item.inv_count || 0)
+        }))
+      } else {
+        sheetName = 'Invoices_Report'
+        const list = filteredInvoices.length ? filteredInvoices : data
+        rowsToExport = list.map((inv, idx) => {
+          const totalAmt = Number(inv.total || 0)
+          const paidAmt = Number(inv.paid || 0)
+          const remAmt = Math.max(0, totalAmt - paidAmt)
+          return {
+            'م': idx + 1,
+            'رقم الفاتورة': `#${inv.id}`,
+            'التاريخ والوقت': inv.created_at ? parseDate(inv.created_at).toLocaleString('ar-EG') : '—',
+            'الكاشير': inv.cashier_name || 'مدير النظام',
+            'العميل': inv.customer_name || 'عميل نقدي',
+            'هاتف العميل': inv.customer_phone || '—',
+            'طريقة الدفع': payLabel[inv.payment_method] || inv.payment_method,
+            'إجمالي الفاتورة': totalAmt.toFixed(2),
+            'الخصم': Number(inv.discount || 0).toFixed(2),
+            'المدفوع': paidAmt.toFixed(2),
+            'المتبقي / آجل': remAmt.toFixed(2),
+            'الحالة': inv.status === 'paid' ? 'مدفوعة بالكامل' : inv.status === 'partial' ? 'مدفوعة جزئياً' : inv.status || 'مكتملة',
+            'ملاحظات': inv.notes || '—'
+          }
+        })
+      }
+
+      // Chunked conversion to prevent main renderer freeze
+      const CHUNK_SIZE = 1000
+      const totalRows = rowsToExport.length
+      const batchedRows = []
+
+      for (let i = 0; i < totalRows; i += CHUNK_SIZE) {
+        const chunk = rowsToExport.slice(i, i + CHUNK_SIZE)
+        batchedRows.push(...chunk)
+        setExportProgress(Math.min(100, Math.round(((i + chunk.length) / totalRows) * 100)))
+        await new Promise(resolve => setTimeout(resolve, 0))
+      }
+
+      const sheet = XLSX.utils.json_to_sheet(safeRows(batchedRows))
+      const book = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(book, sheet, sheetName)
+      const fileName = `sales-${subTab}-${today()}.${type}`
+      XLSX.writeFile(book, fileName)
+    } catch (err) {
+      console.error('Export error:', err)
+    } finally {
+      setIsExporting(false)
+      setExportProgress(0)
+    }
   }
 
   const payLabel = { cash: 'نقد', card: 'بطاقة', credit: 'آجل', split: 'تقسيم مبلغ' }
   const payColor = { cash: 'bg-green-100 text-green-700', card: 'bg-emerald-100 text-emerald-700', credit: 'bg-amber-100 text-amber-700', split: 'bg-cyan-100 text-cyan-700' }
   const cardSubLabels = { wallet: 'محفظة إلكترونية', bank_card: 'بطاقة بنكية' }
+  
   const invoicesForSelectedCashier = selectedCashierLog
     ? data.filter(inv => (inv.cashier_name || 'مدير النظام') === selectedCashierLog)
     : []
+
   const cashierSummary = selectedCashierLog
     ? (() => {
         const totalAmount = invoicesForSelectedCashier.reduce((sum, inv) => sum + Number(inv.total || 0), 0)
@@ -673,167 +1506,627 @@ function SalesView({ dateFrom, dateTo, onSetDates, currency, settings }) {
         const bankCardInvoices = invoicesForSelectedCashier.filter(
           inv => (inv.payment_method === 'card' || inv.payment_method === 'split') && Number(inv.card_amount || (inv.payment_method === 'card' ? inv.paid : 0) || 0) > 0 && inv.card_sub_type !== 'wallet'
         ).length
-
-        return {
-          totalAmount,
-          totalInvoices,
-          creditInvoices,
-          cashInvoices,
-          walletInvoices,
-          bankCardInvoices,
-        }
+        return { totalAmount, totalInvoices, creditInvoices, cashInvoices, walletInvoices, bankCardInvoices }
       })()
     : null
 
   async function handlePrintCashierInvoices() {
     if (!selectedCashierLog || !invoicesForSelectedCashier.length) return
-    const storeName = String(settings?.store_name || '').trim() || 'MGIVIA'
-
-    const rows = invoicesForSelectedCashier.map((inv, idx) => {
-      const paymentText =
-        inv.payment_method === 'split'
-          ? `تقسيم مبلغ (نقدي ${Number(inv.cash_amount || 0).toFixed(2)} / إلكتروني ${Number(inv.card_amount || 0).toFixed(2)} / آجل ${Number(inv.credit_amount || 0).toFixed(2)})`
-          : inv.payment_method === 'card'
-          ? (cardSubLabels[inv.card_sub_type] || 'بطاقة بنكية')
-          : (payLabel[inv.payment_method] || inv.payment_method)
-
-      const cardMeta =
-        (inv.payment_method === 'card' || inv.payment_method === 'split') && inv.card_number
-          ? `<div style="font-size:11px;color:#64748b;font-weight:700;margin-top:4px">${inv.card_sub_type === 'wallet' ? 'رقم المحفظة' : 'رقم البطاقة'}: ${String(inv.card_number).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`
-          : ''
-
-      const dateTimeStr = new Date(inv.created_at).toLocaleString('en-GB', { hour12: true })
-      const [datePart, timePart] = dateTimeStr.split(', ')
-
-      return `
-        <tr>
-          <td>${idx + 1}</td>
-          <td>#${inv.id}</td>
-          <td dir="ltr" style="text-align:right">${datePart}${timePart ? `<br/>${timePart}` : ''}</td>
-          <td>${paymentText}${cardMeta}</td>
-          <td>${inv.customer_name || 'عميل نقدي'}</td>
-          <td>${fmt(inv.total)} ${currency}</td>
-        </tr>
-      `
+    // every name typed by a person is escaped before it goes into the print window
+    const storeName = escapeHtml(String(settings?.store_name || '').trim() || 'NEXA POS')
+    const cashierName = escapeHtml(selectedCashierLog)
+    const rowsHtml = invoicesForSelectedCashier.map((inv, idx) => {
+      const paymentText = inv.payment_method === 'split'
+        ? `تقسيم (نقدي ${Number(inv.cash_amount || 0).toFixed(2)} / إلكتروني ${Number(inv.card_amount || 0).toFixed(2)} / آجل ${Number(inv.credit_amount || 0).toFixed(2)})`
+        : inv.payment_method === 'card' ? (cardSubLabels[inv.card_sub_type] || 'بطاقة بنكية') : (payLabel[inv.payment_method] || inv.payment_method)
+      const invDisplayNo = `#${inv.id}`
+      const dateTimeStr = inv.created_at ? parseDate(inv.created_at).toLocaleString('en-GB', { hour12: true }) : '—'
+      return `<tr><td>${idx + 1}</td><td>${invDisplayNo}</td><td>${dateTimeStr}</td><td>${escapeHtml(paymentText)}</td><td>${escapeHtml(inv.customer_name || 'عميل نقدي')}</td><td>${fmt(inv.total)} ${escapeHtml(currency)}</td></tr>`
     }).join('')
 
-    const html = `<!DOCTYPE html>
-    <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8" />
-        <title>فواتير المستخدم - ${selectedCashierLog}</title>
-        <style>
-          *{box-sizing:border-box}
-          body{font-family:'Segoe UI',Tahoma,sans-serif;background:#fff;color:#0f172a;margin:0}
-          .page{max-width:1000px;margin:0 auto;padding:32px}
-          .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #15803d;padding-bottom:18px;margin-bottom:24px}
-          .header h1{font-size:26px;font-weight:900;color:#15803d;margin:0 0 6px}
-          .meta{font-size:13px;font-weight:700;color:#64748b}
-          .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px}
-          .card{border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#f8fafc}
-          .card .label{font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px}
-          .card .value{font-size:22px;font-weight:900;color:#0f172a}
-          table{width:100%;border-collapse:collapse}
-          thead th{background:#f1f5f9;color:#475569;padding:12px;font-size:12px;font-weight:800;text-align:right;border-bottom:2px solid #cbd5e1}
-          tbody td{padding:12px;border-bottom:1px solid #e2e8f0;font-size:13px;vertical-align:top}
-          .footer{margin-top:24px;text-align:center;font-size:11px;color:#94a3b8}
-        </style>
-      </head>
-      <body>
-        <div class="page">
-          <div class="header">
-            <div>
-              <h1>فواتير المستخدم</h1>
-              <div class="meta">المستخدم: ${selectedCashierLog}</div>
-              <div class="meta">الفترة: ${fmtDate(dateFrom)} إلى ${fmtDate(dateTo)}</div>
-            </div>
-      <div class="meta">${storeName}</div>
-          </div>
-          <div class="cards">
-            <div class="card"><div class="label">عدد الفواتير</div><div class="value">${cashierSummary?.totalInvoices || 0}</div></div>
-            <div class="card"><div class="label">إجمالي الفواتير</div><div class="value">${fmt(cashierSummary?.totalAmount || 0)} ${currency}</div></div>
-            <div class="card"><div class="label">فواتير آجل</div><div class="value">${cashierSummary?.creditInvoices || 0}</div></div>
-            <div class="card"><div class="label">فواتير نقدية</div><div class="value">${cashierSummary?.cashInvoices || 0}</div></div>
-            <div class="card"><div class="label">فواتير محفظة إلكترونية</div><div class="value">${cashierSummary?.walletInvoices || 0}</div></div>
-            <div class="card"><div class="label">فواتير بطاقة بنكية</div><div class="value">${cashierSummary?.bankCardInvoices || 0}</div></div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>رقم الفاتورة</th>
-                <th>التاريخ والوقت</th>
-                <th>طريقة الدفع</th>
-                <th>العميل</th>
-                <th>الإجمالي</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-      <div class="footer">طُبع بواسطة ${storeName}</div>
-        </div>
-      </body>
-    </html>`
-
+    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/><title>فواتير المستخدم - ${cashierName}</title><style>body{font-family:sans-serif;padding:20px;direction:rtl}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #ccc;text-align:right}th{background:#f0f0f0}</style></head><body><h2>${storeName} - فواتير الكاشير: ${cashierName}</h2><table><thead><tr><th>#</th><th>رقم الفاتورة</th><th>التاريخ</th><th>طريقة الدفع</th><th>العميل</th><th>الإجمالي</th></tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`
     await window.mgpos.printA4(html, {})
   }
 
+  const subTabs = [
+    { key: 'invoices', label: 'فواتير المبيعات', icon: FileText },
+    { key: 'items', label: 'المبيعات بالأصناف', icon: Package },
+    { key: 'category', label: 'المبيعات بالفئات', icon: Tag },
+    { key: 'hourly', label: 'ساعات الذروة', icon: Clock },
+    // profit per item needs the cost: hidden unless the user may see both profit and cost
+    ...(!isProfitMasked && !isCostMasked ? [{ key: 'profitability', label: 'ربحية الأصناف', icon: Percent }] : []),
+    { key: 'tax', label: 'تقرير الضرائب', icon: Receipt },
+    { key: 'cashiers', label: 'أداء الكاشيرات', icon: Users },
+  ]
+
   return (
-    <div className="space-y-6">
-      <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard icon={Users} label="عدد الكاشيرية" value={rows.length} color="blue" />
-        <StatCard icon={FileText} label="إجمالي الفواتير" value={data.length} color="green" />
-        <StatCard icon={DollarSign} label="تقدير المبيعات" value={`${fmt(rows.reduce((s,r)=>s+r.total,0))} ${currency}`} color="violet" />
-        <StatCard icon={TrendingUp} label="متوسط الفاتورة" value={data.length ? `${fmt(rows.reduce((s,r)=>s+r.total,0)/data.length)} ${currency}` : '0'} color="amber" />
+    <div className="space-y-5 animate-fadeIn">
+      {/* ── SubTabs Strip ── */}
+      <div className="bg-white rounded-2xl p-2 border border-slate-200/80 shadow-2xs flex flex-wrap gap-1.5 items-center">
+        {subTabs.map(t => {
+          const Icon = t.icon
+          const isActive = subTab === t.key
+          return (
+            <button
+              key={t.key}
+              onClick={() => setSubTab(t.key)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all ${
+                isActive
+                  ? 'bg-emerald-700 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Icon size={14} />
+              <span>{t.label}</span>
+            </button>
+          )
+        })}
+
+        <button
+          onClick={() => exportData('xlsx')}
+          disabled={!data.length || isExporting}
+          className="mr-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-emerald-700 hover:text-white text-slate-700 text-xs font-black transition border border-slate-200 disabled:opacity-50 cursor-pointer"
+        >
+          {isExporting ? <RefreshCw size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+          <span>{isExporting ? `جاري التصدير (${exportProgress}%)...` : 'تصدير إكسيل'}</span>
+        </button>
       </div>
-      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-50 flex items-center gap-3 bg-slate-50/50">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-800 text-white flex items-center justify-center"><ShoppingCart size={18}/></div>
-          <h3 className="font-black text-slate-800 text-lg">أداء الكاشيرية حسب الفترة</h3>
+
+      {loadError && (
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">{loadError}</div>
+      )}
+
+      {/* ── SubTab 1: Invoices List ── */}
+      {subTab === 'invoices' && (
+        <div className="space-y-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard icon={FileText} label="عدد فواتير الفترة" value={filteredInvoices.length} color="blue" />
+            <StatCard icon={DollarSign} label="إجمالي مبيعات الفواتير" value={`${fmt(filteredInvoices.reduce((s,r)=>s+Number(r.total||0),0))} ${currency}`} color="green" />
+            <StatCard icon={TrendingUp} label="متوسط الفاتورة (AOV)" value={`${fmt(filteredInvoices.length ? filteredInvoices.reduce((s,r)=>s+Number(r.total||0),0)/filteredInvoices.length : 0)} ${currency}`} color="amber" />
+            <StatCard icon={Banknote} label="المحصّل كاش" value={`${fmt(filteredInvoices.reduce((s,r)=>s+Number(r.cash_amount||(r.payment_method==='cash'?r.paid:0)||0),0))} ${currency}`} color="violet" />
+          </div>
+
+          {/* Filter Bar */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[200px] flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <Search size={16} className="text-slate-400 ml-2" />
+              <input
+                type="text"
+                aria-label="بحث برقم الفاتورة أو اسم العميل" placeholder="ابحث برقم الفاتورة أو اسم العميل..."
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                className="w-full bg-transparent text-sm font-bold outline-none text-slate-800 placeholder:text-slate-400"
+              />
+              {searchInput && (
+                <button aria-label="مسح البحث" onClick={() => { setSearchInput(''); setSearch(''); }} className="text-slate-400 hover:text-slate-600">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            <select
+              value={cashierId}
+              aria-label="تصفية حسب الكاشير" onChange={e => setCashierId(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+            >
+              <option value="all">كل الكاشيرات ({users.length})</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id}>{u.username || u.name}</option>
+              ))}
+            </select>
+
+            <select
+              value={method}
+              aria-label="تصفية حسب طريقة الدفع" onChange={e => setMethod(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+            >
+              <option value="all">كل طرق الدفع</option>
+              <option value="cash">💵 نقد (كاش)</option>
+              <option value="card">💳 بطاقة إلكترونية</option>
+              <option value="credit">⏳ آجل (دين)</option>
+              <option value="split">🔄 تقسيم مبلغ</option>
+            </select>
+
+            <div className="flex items-center gap-1.5 mr-auto">
+              <span className="text-xs font-bold text-slate-500">لكل صفحة:</span>
+              <select
+                value={invPageSize}
+                aria-label="عدد الفواتير في الصفحة" onChange={e => setInvPageSize(Number(e.target.value))}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Invoices Table */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold text-xs">
+                  <tr>
+                    <th className="px-4 py-3.5 text-right">رقم الفاتورة</th>
+                    <th className="px-4 py-3.5 text-right">التاريخ والوقت</th>
+                    <th className="px-4 py-3.5 text-right">العميل</th>
+                    <th className="px-4 py-3.5 text-right">الكاشير</th>
+                    <th className="px-4 py-3.5 text-center">طريقة الدفع</th>
+                    <th className="px-4 py-3.5 text-left">إجمالي الفاتورة</th>
+                    <th className="px-4 py-3.5 text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loading ? (
+                    <tr><td colSpan={7} className="py-16 text-center text-slate-400 font-bold">جاري تحميل الفواتير...</td></tr>
+                  ) : pagedInvoices.length === 0 ? (
+                    <tr><td colSpan={7} className="py-16 text-center text-slate-400 font-bold">لا توجد فواتير مطابقة</td></tr>
+                  ) : (
+                    pagedInvoices.map(inv => (
+                      <tr key={inv.id} className="hover:bg-slate-50/60 transition">
+                        <td className="px-4 py-3 font-mono">
+                          <span className="font-black text-slate-800 text-sm">
+                            #{inv.id}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                          {inv.created_at ? parseDate(inv.created_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                        </td>
+                        <td className="px-4 py-3 font-bold text-slate-700">{inv.customer_name || 'عميل نقدي'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600 font-bold">{inv.cashier_name || 'مدير النظام'}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${payColor[inv.payment_method] || 'bg-slate-100 text-slate-700'}`}>
+                            {payLabel[inv.payment_method] || inv.payment_method}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-left font-mono font-black text-slate-900">
+                          {fmt(inv.total)} <span className="text-[10px] text-slate-400">{currency}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => setSelectedInv(inv)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-600 hover:text-white text-xs font-bold transition border border-emerald-200"
+                          >
+                            <Eye size={13} />
+                            <span>معاينة</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Invoices Pagination footer */}
+            {filteredInvoices.length > 0 && (
+              <div className="px-5 py-3.5 bg-slate-50/90 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs font-bold text-slate-600">
+                <div>
+                  عرض من <span className="font-mono font-black text-slate-900">{((invPage - 1) * invPageSize) + 1}</span> إلى{' '}
+                  <span className="font-mono font-black text-slate-900">{Math.min(invPage * invPageSize, filteredInvoices.length)}</span> من إجمالي{' '}
+                  <span className="font-mono font-black text-emerald-700">{filteredInvoices.length.toLocaleString()}</span> فاتورة
+                </div>
+
+                <div className="flex items-center gap-1.5" dir="ltr">
+                  <button
+                    aria-label="الصفحة الأولى" onClick={() => setInvPage(1)}
+                    disabled={invPage === 1}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="الصفحة الأولى"
+                  >
+                    «
+                  </button>
+                  <button
+                    aria-label="السابق" onClick={() => setInvPage(p => Math.max(1, p - 1))}
+                    disabled={invPage === 1}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="السابق"
+                  >
+                    ‹
+                  </button>
+                  <span className="px-3 py-1 font-mono font-black bg-white border border-slate-200 rounded-lg text-slate-800 text-xs">
+                    {invPage} / {totalInvPages}
+                  </span>
+                  <button
+                    aria-label="التالي" onClick={() => setInvPage(p => Math.min(totalInvPages, p + 1))}
+                    disabled={invPage === totalInvPages}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="التالي"
+                  >
+                    ›
+                  </button>
+                  <button
+                    aria-label="الصفحة الأخيرة" onClick={() => setInvPage(totalInvPages)}
+                    disabled={invPage === totalInvPages}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="الصفحة الأخيرة"
+                  >
+                    »
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-400">
-            <tr>
-              <th className="px-8 py-5 text-right font-black text-[10px] uppercase">الكاشير</th>
-              <th className="px-8 py-5 text-center font-black text-[10px] uppercase">عدد الفواتير</th>
-              <th className="px-8 py-5 text-center font-black text-[10px] uppercase">نقدي</th>
-              <th className="px-8 py-5 text-center font-black text-[10px] uppercase">بطاقة</th>
-              <th className="px-8 py-5 text-center font-black text-[10px] uppercase">آجل</th>
-              <th className="px-8 py-5 text-left font-black text-[10px] uppercase">إجمالي المبيعات</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {rows.length === 0 ? (
-              <tr><td colSpan={6} className="py-20 text-center text-slate-300 font-bold">لا توجد بيانات</td></tr>
-            ) : rows.map((r, i) => (
-              <tr key={i} className="hover:bg-emerald-50/30 transition group/row">
-                <td className="px-8 py-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-sm">{r.name[0]?.toUpperCase()}</div>
-                    <span className="font-black text-slate-800">{r.name}</span>
-                    <button 
-                      onClick={() => setSelectedCashierLog(r.name)}
-                      title="عرض فواتير الكاشير"
-                      className="opacity-0 group-hover/row:opacity-100 transition-opacity mr-auto w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-emerald-600 hover:text-white flex items-center justify-center"
-                    >
-                      <Eye size={16} />
-                    </button>
+      )}
+
+      {/* ── SubTab 2: Items Sold ── */}
+      {subTab === 'items' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-black text-slate-800 text-sm">الأصناف الأكثر مبيعاً في الفترة</h3>
+              <span className="text-xs text-slate-400 font-bold">إجمالي أصناف: {data.length}</span>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500 font-bold text-xs border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-right">#</th>
+                  <th className="px-4 py-3 text-right">اسم المنتج</th>
+                  <th className="px-4 py-3 text-center">الكمية المباعة</th>
+                  <th className="px-4 py-3 text-center">عدد الفواتير</th>
+                  <th className="px-4 py-3 text-left">إجمالي المبيعات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.length === 0 ? (
+                  <tr><td colSpan={5} className="py-12 text-center text-slate-400 font-bold">لا توجد مبيعات أصناف</td></tr>
+                ) : (
+                  data.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/60 transition">
+                      <td className="px-4 py-3 text-xs text-slate-400 font-mono">{idx + 1}</td>
+                      <td className="px-4 py-3 font-black text-slate-800">{item.name}</td>
+                      <td className="px-4 py-3 text-center font-mono font-bold text-emerald-700">
+                        {item.total_qty} <span className="text-[10px] text-slate-400">{item.unit || 'قطعة'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center font-mono text-slate-600">{item.inv_count}</td>
+                      <td className="px-4 py-3 text-left font-mono font-black text-slate-900">
+                        {fmt(item.total_sales)} <span className="text-[10px] text-slate-400">{currency}</span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── SubTab 3: Category Breakdown ── */}
+      {subTab === 'category' && (
+        <div className="grid lg:grid-cols-2 gap-5">
+          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs">
+            <h3 className="font-black text-slate-800 text-sm mb-4">الرسم الدائري لتوزيع الفئات</h3>
+            <DonutChart data={data} />
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100">
+              <h3 className="font-black text-slate-800 text-sm">تفاصيل مبيعات كل فئة</h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500 font-bold text-xs border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-right">الفئة</th>
+                  <th className="px-4 py-3 text-left">إجمالي المبيعات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.map((c, idx) => (
+                  <tr key={idx}>
+                    <td className="px-4 py-3 font-black text-slate-800">{c.category || 'أخرى'}</td>
+                    <td className="px-4 py-3 text-left font-mono font-black text-emerald-800">{fmt(c.total)} {currency}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── SubTab 4: Hourly Sales & Peak Analysis (NEW) ── */}
+      {subTab === 'hourly' && (
+        <div className="space-y-4">
+          <div className="grid sm:grid-cols-3 gap-4">
+            <StatCard icon={Clock} label="ساعة الذروة الكبرى" value={peakHour ? peakHour.timeRange : '—'} color="amber" sub="أعلى فترة مبيعات في اليوم" />
+            <StatCard icon={DollarSign} label="مبيعات ساعة الذروة" value={peakHour ? `${fmt(peakHour.total)} ${currency}` : '0.00'} color="green" sub="إجمالي الإيراد في ساعة الذروة" />
+            <StatCard icon={Flame} label="عدد طلبات الذروة" value={peakHour ? peakHour.orders : 0} color="red" sub="عدد الفواتير الصادرة" />
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs">
+            <h3 className="font-black text-slate-800 text-sm mb-6 flex items-center gap-2">
+              <Clock size={16} className="text-emerald-700" />
+              توزيع المبيعات على مدار 24 ساعة (Heatmap Hourly Sales)
+            </h3>
+            
+            {/* 24-Hour Bar Graph */}
+            <div className="flex items-end justify-between gap-1.5 h-48 pb-2 px-2 overflow-x-auto">
+              {hourlyData.map(h => {
+                const maxHour = Math.max(...hourlyData.map(x => x.total), 1)
+                const heightPct = Math.max(4, (h.total / maxHour) * 100)
+                const isPeak = peakHour && peakHour.hour === h.hour && h.total > 0
+                return (
+                  <div key={h.hour} className="flex flex-col items-center flex-1 min-w-[28px] group relative">
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded shadow whitespace-nowrap z-10 font-mono font-bold">
+                      {h.timeRange}: {fmt(h.total)} ({h.orders} طلب)
+                    </div>
+                    <div
+                      className={`w-full rounded-t-md transition-all duration-300 ${
+                        isPeak
+                          ? 'bg-amber-500 shadow-md shadow-amber-500/30'
+                          : h.total > 0
+                          ? 'bg-emerald-600 hover:bg-emerald-500'
+                          : 'bg-slate-200'
+                      }`}
+                      style={{ height: `${heightPct}%` }}
+                    />
+                    <span className="text-[10px] text-slate-400 font-mono mt-2">{h.hour}</span>
                   </div>
-                </td>
-                <td className="px-8 py-5 text-center"><span className="bg-emerald-50 text-emerald-800 px-3 py-1 rounded-lg font-black text-sm">{r.count}</span></td>
-                <td className="px-8 py-5 text-center text-green-600 font-black font-mono">{fmt(r.cash)}</td>
-                <td className="px-8 py-5 text-center text-emerald-600 font-black font-mono">{fmt(r.card)}</td>
-                <td className="px-8 py-5 text-center text-amber-600 font-black font-mono">{fmt(r.credit)}</td>
-                <td className="px-8 py-5 text-left font-black text-emerald-900 font-mono text-base">{fmt(r.total)} <span className="text-xs opacity-30">{currency}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                )
+              })}
+            </div>
+            <p className="text-center text-[11px] text-slate-400 mt-2 font-bold">ساعات اليوم (من 0 صباحاً حتى 23 ليلاً)</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── SubTab 5: Product Profitability & Margins (NEW) ── */}
+      {subTab === 'profitability' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div>
+              <h3 className="font-black text-slate-800 text-base">تحليل ربحية المنتجات وهوامش الربح</h3>
+              <p className="text-xs text-slate-400 font-bold">مقارنة الإيراد بتكلفة التوريد لتحديد المنتجات الأعلى ربحاً</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setProfitSort('profit')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${profitSort === 'profit' ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'}`}
+              >
+                الأعلى ربحاً
+              </button>
+              <button
+                onClick={() => setProfitSort('sales')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${profitSort === 'sales' ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'}`}
+              >
+                الأعلى إيراداً
+              </button>
+              <button
+                onClick={() => setProfitSort('margin')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${profitSort === 'margin' ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'}`}
+              >
+                الأعلى هامشاً %
+              </button>
+            </div>
+          </div>
+
+          {/* Warning banner if items were sold without a cost price */}
+          {profitabilityRows.some(r => r.hasNoCost) && (
+            <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 font-black shrink-0">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h4 className="font-black text-sm">
+                    تنبيه: يوجد {profitabilityRows.filter(r => r.hasNoCost).length} صنف تم بيعه بدون تسجيل سعر تكلفة
+                  </h4>
+                  <p className="text-xs text-amber-700 mt-0.5 font-bold">
+                    هامش الربح (100%) المعروض لهذه الأصناف تقريبي لأن التكلفة مسجلة 0. يمكنك النقر على "تحديد التكلفة" لضبطها وتصحيح الأرباح بأثر رجعي فوراً.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500 font-bold text-xs border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-right">المنتج</th>
+                  <th className="px-4 py-3 text-center">الكمية المباعة</th>
+                  <th className="px-4 py-3 text-left">إجمالي المبيعات</th>
+                  <th className="px-4 py-3 text-left">إجمالي التكلفة</th>
+                  <th className="px-4 py-3 text-left">صافي الربح</th>
+                  <th className="px-4 py-3 text-center">هامش الربح %</th>
+                  <th className="px-4 py-3 text-center">الإجراء</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {profitabilityRows.length === 0 ? (
+                  <tr><td colSpan={7} className="py-12 text-center text-slate-400 font-bold">لا توجد بيانات ربحية</td></tr>
+                ) : (
+                  profitabilityRows.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/60 transition group">
+                      <td className="px-4 py-3">
+                        <div className="font-black text-slate-800">{item.name}</div>
+                        {item.barcode && <div className="text-[10px] text-slate-400 font-mono">{item.barcode}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-center font-mono font-bold text-slate-700">{item.qty} {item.unit || 'قطعة'}</td>
+                      <td className="px-4 py-3 text-left font-mono font-bold text-slate-800">{fmt(item.revenue)}</td>
+                      <td className="px-4 py-3 text-left font-mono">
+                        {item.hasNoCost ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-black bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                              <AlertTriangle size={11} className="text-amber-700" />
+                              غير محددة (0.00)
+                            </span>
+                            <button
+                              onClick={() => setCostModalProduct(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black shadow-xs hover:shadow transition"
+                              title="تحديد سعر التكلفة وحساب الأرباح"
+                            >
+                              <Pencil size={11} />
+                              تحديد التكلفة
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <div>
+                              <span className="font-bold text-rose-600">{fmt(item.cost)}</span>
+                              <span className="text-[10px] text-slate-400 mr-1">({fmt(item.masterCost)}/قطعة)</span>
+                              {item.zeroCostQty > 0 && (
+                                <div className="text-[9px] font-bold text-amber-600">
+                                  ⚠️ {item.zeroCostQty} مباعة بتكلفة 0
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => setCostModalProduct(item)}
+                              aria-label="تعديل سعر التكلفة" className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-md transition"
+                              title="تعديل سعر التكلفة"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-left font-mono">
+                        <div className="font-black text-emerald-700">{fmt(item.profit)} {currency}</div>
+                        {item.hasNoCost && (
+                          <div className="text-[9px] font-bold text-amber-600">*محسوب بتكلفة 0</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center font-mono">
+                        {item.hasNoCost ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                              100%*
+                            </span>
+                            <span className="text-[9px] text-amber-600 font-bold mt-0.5">تكلفة غير مسجلة</span>
+                          </div>
+                        ) : (
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${item.margin >= 30 ? 'bg-emerald-100 text-emerald-800' : item.margin >= 15 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-700'}`}>
+                            {item.margin.toFixed(1)}%
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => setCostModalProduct(item)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all shadow-2xs ${
+                            item.hasNoCost
+                              ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white animate-pulse hover:animate-none'
+                              : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200/80'
+                          }`}
+                        >
+                          <Pencil size={11} />
+                          {item.hasNoCost ? 'تحديد التكلفة' : 'تعديل التكلفة'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── SubTab 6: Tax Report (NEW) ── */}
+      {subTab === 'tax' && (
+        <div className="space-y-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <StatCard icon={Receipt} label="إجمالي ضريبة المبيعات المحصلة" value={`${fmt(filteredInvoices.reduce((s,i)=>s+Number(i.tax||0),0))} ${currency}`} color="blue" sub="ضريبة القيمة المضافة المحصلة" />
+            <StatCard icon={FileText} label="الفواتير الخاضعة للضريبة" value={filteredInvoices.length} color="green" sub="فواتير تحتوي على ضريبة" />
+            <StatCard icon={DollarSign} label="إجمالي المبيعات الخاضعة" value={`${fmt(filteredInvoices.reduce((s,i)=>s+Number(i.total||0),0))} ${currency}`} color="violet" sub="قيمة الفواتير الضريبية" />
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-black text-slate-800 text-sm">كشف الفواتير الضريبية للإقرار المالي</h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500 font-bold text-xs border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-right">رقم الفاتورة</th>
+                  <th className="px-4 py-3 text-right">التاريخ</th>
+                  <th className="px-4 py-3 text-right">العميل</th>
+                  <th className="px-4 py-3 text-left">المبلغ قبل الضريبة</th>
+                  <th className="px-4 py-3 text-left">الضريبة المحصلة</th>
+                  <th className="px-4 py-3 text-left">الإجمالي شامل الضريبة</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredInvoices.map(inv => {
+                  const taxAmt = Number(inv.tax || 0)
+                  const totalAmt = Number(inv.total || 0)
+                  const subTotal = Math.max(0, totalAmt - taxAmt)
+                  return (
+                    <tr key={inv.id}>
+                      <td className="px-4 py-3 font-mono">
+                        <span className="font-black text-slate-800 text-sm">
+                          #{inv.id}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-500">{inv.created_at ? parseDate(inv.created_at).toLocaleDateString('ar-EG') : '—'}</td>
+                      <td className="px-4 py-3 font-bold text-slate-700">{inv.customer_name || 'عميل نقدي'}</td>
+                      <td className="px-4 py-3 text-left font-mono font-bold text-slate-700">{fmt(subTotal)}</td>
+                      <td className="px-4 py-3 text-left font-mono font-black text-emerald-700">+{fmt(taxAmt)}</td>
+                      <td className="px-4 py-3 text-left font-mono font-black text-slate-900">{fmt(totalAmt)} {currency}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── SubTab 7: Cashier Performance ── */}
+      {subTab === 'cashiers' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-[2rem] shadow-2xs border border-slate-200/80 overflow-hidden">
+            <div className="px-8 py-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-800 text-white flex items-center justify-center"><ShoppingCart size={18}/></div>
+              <h3 className="font-black text-slate-800 text-base">أداء الكاشيرية ومقارنة الإنتاجية</h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-400">
+                <tr>
+                  <th className="px-6 py-4 text-right font-black text-[10px] uppercase">الكاشير</th>
+                  <th className="px-6 py-4 text-center font-black text-[10px] uppercase">عدد الفواتير</th>
+                  <th className="px-6 py-4 text-center font-black text-[10px] uppercase">نقدي</th>
+                  <th className="px-6 py-4 text-center font-black text-[10px] uppercase">بطاقة</th>
+                  <th className="px-6 py-4 text-center font-black text-[10px] uppercase">آجل</th>
+                  <th className="px-6 py-4 text-left font-black text-[10px] uppercase">إجمالي المبيعات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {cashierRows.length === 0 ? (
+                  <tr><td colSpan={6} className="py-20 text-center text-slate-300 font-bold">لا توجد بيانات</td></tr>
+                ) : cashierRows.map((r, i) => (
+                  <tr key={i} className="hover:bg-emerald-50/30 transition group/row">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-sm">{r.name[0]?.toUpperCase()}</div>
+                        <span className="font-black text-slate-800">{r.name}</span>
+                        <button 
+                          onClick={() => setSelectedCashierLog(r.name)}
+                          title="عرض فواتير الكاشير" aria-label="عرض فواتير الكاشير"
+                          className="opacity-0 group-hover/row:opacity-100 transition-opacity mr-auto w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-emerald-600 hover:text-white flex items-center justify-center"
+                        >
+                          <Eye size={16} />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-center"><span className="bg-emerald-50 text-emerald-800 px-3 py-1 rounded-lg font-black text-sm">{r.count}</span></td>
+                    <td className="px-6 py-4 text-center text-green-600 font-black font-mono">{fmt(r.cash)}</td>
+                    <td className="px-6 py-4 text-center text-emerald-600 font-black font-mono">{fmt(r.card)}</td>
+                    <td className="px-6 py-4 text-center text-amber-600 font-black font-mono">{fmt(r.credit)}</td>
+                    <td className="px-6 py-4 text-left font-black text-emerald-900 font-mono text-base">{fmt(r.total)} <span className="text-xs opacity-30">{currency}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Cashier Invoices Modal */}
       {selectedCashierLog && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fadeIn">
           <div className="bg-white w-full max-w-5xl rounded-[2.5rem] shadow-2xl border border-slate-100 flex flex-col h-[85vh] animate-slideUp overflow-hidden">
-            {/* Header */}
             <div className="bg-slate-50 px-8 py-6 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shadow-inner">
@@ -848,17 +2141,13 @@ function SalesView({ dateFrom, dateTo, onSetDates, currency, settings }) {
                 <button
                   onClick={handlePrintCashierInvoices}
                   disabled={!invoicesForSelectedCashier.length}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-black transition ${
-                    invoicesForSelectedCashier.length
-                      ? 'bg-emerald-800 text-white hover:bg-emerald-900 shadow-lg shadow-emerald-800/20'
-                      : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                  }`}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-black transition bg-emerald-800 text-white hover:bg-emerald-900"
                 >
                   <Printer size={16} /> طباعة
                 </button>
                 <button 
-                  onClick={() => setSelectedCashierLog(null)}
-                  className="w-10 h-10 rounded-full bg-white border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all flex items-center justify-center shadow-sm"
+                  aria-label="إغلاق سجل الفواتير" onClick={() => setSelectedCashierLog(null)}
+                  className="w-10 h-10 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-red-500 flex items-center justify-center"
                 >
                   <X size={20} />
                 </button>
@@ -874,7 +2163,6 @@ function SalesView({ dateFrom, dateTo, onSetDates, currency, settings }) {
               <StatCard icon={CreditCard} label="فواتير بطاقة" value={cashierSummary?.bankCardInvoices || 0} color="slate" />
             </div>
 
-            {/* Body - Invoices Table */}
             <div className="flex-1 overflow-auto bg-slate-50/50 p-6">
               <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                 <table className="w-full text-sm">
@@ -890,25 +2178,50 @@ function SalesView({ dateFrom, dateTo, onSetDates, currency, settings }) {
                     {invoicesForSelectedCashier.length === 0 ? (
                       <tr><td colSpan={4} className="py-12 text-center text-slate-400 font-bold">لا توجد فواتير</td></tr>
                     ) : (
-                      invoicesForSelectedCashier.map((inv, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 transition cursor-pointer group/inv" onClick={() => setSelectedInv(inv)}>
-                          <td className="px-6 py-4">
-                            <span className="font-black text-slate-800 font-mono bg-slate-100 px-3 py-1 rounded-lg">#{inv.id}</span>
-                          </td>
-                          <td className="px-6 py-4 text-center text-slate-500 font-bold font-mono">
-                            {new Date(inv.created_at).toLocaleString('en-GB', { hour12: true })}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`px-3 py-1 rounded-lg font-black text-[10px] uppercase ${payColor[inv.payment_method]}`}>
-                              {inv.payment_method === 'card' ? (cardSubLabels[inv.card_sub_type] || 'بطاقة بنكية') : payLabel[inv.payment_method]}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-left">
-                            <span className="font-black text-slate-800 text-base font-mono">{fmt(inv.total)}</span>
-                            <span className="text-[10px] text-slate-400 mr-1">{currency}</span>
-                          </td>
-                        </tr>
-                      ))
+                      invoicesForSelectedCashier.map((inv, idx) => {
+                        const isCreditNote = Number(inv.total) < 0 || inv.is_return || inv.original_invoice_id
+                        const isFullyReturned = inv.status === 'returned'
+                        const isPartiallyReturned = inv.status === 'partially_returned' || (Number(inv.returned_total) > 0 && !isFullyReturned)
+                        return (
+                          <tr key={idx} className={`hover:bg-slate-50 transition cursor-pointer group/inv ${isCreditNote ? 'bg-red-50/20' : ''}`} onClick={() => setSelectedInv(inv)}>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-black font-mono px-2.5 py-1 rounded-lg text-sm ${
+                                  isCreditNote ? 'bg-rose-50 text-rose-800 border border-rose-200' : 'bg-slate-100 text-slate-800'
+                                }`}>
+                                  #{inv.daily_invoice_number || inv.id}
+                                </span>
+                                {isCreditNote ? (
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">إشعار دائن</span>
+                                ) : isFullyReturned ? (
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-red-100 text-red-800 border border-red-200">مرتجع كلي</span>
+                                ) : isPartiallyReturned ? (
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">مرتجع جزئي</span>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-center text-slate-500 font-bold font-mono">
+                              {parseDate(inv.created_at).toLocaleString('en-GB', { hour12: true })}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`px-3 py-1 rounded-lg font-black text-[10px] uppercase ${payColor[inv.payment_method]}`}>
+                                {inv.payment_method === 'card' ? (cardSubLabels[inv.card_sub_type] || 'بطاقة بنكية') : payLabel[inv.payment_method]}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-left">
+                              <div className="flex flex-col items-end">
+                                <div>
+                                  <span className={`font-black text-base font-mono ${isCreditNote ? 'text-rose-600' : 'text-slate-800'}`}>{fmt(Math.abs(inv.total))}</span>
+                                  <span className="text-[10px] text-slate-400 mr-1">{currency}</span>
+                                </div>
+                                {isPartiallyReturned && Number(inv.returned_total) > 0 && (
+                                  <span className="text-[10px] font-bold text-amber-700">مسترد: {fmt(inv.returned_total)} {currency}</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
                     )}
                   </tbody>
                 </table>
@@ -925,61 +2238,144 @@ function SalesView({ dateFrom, dateTo, onSetDates, currency, settings }) {
           settings={settings}
         />
       )}
+      {costModalProduct && (
+        <SetCostPriceModal
+          product={costModalProduct}
+          currency={currency}
+          onClose={() => setCostModalProduct(null)}
+          onSaved={async () => {
+            await loadData()
+            setCostModalProduct(null)
+          }}
+        />
+      )}
     </div>
   )
 }
-function InventoryView({ from, to, currency }) {
+function InventoryView({ from, to, currency, user }) {
+  const isCostMasked = shouldMaskCostPrice(user)
   const [data, setData] = useState([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [summary, setSummary] = useState({
+    total_items: 0,
+    total_cost_value: 0,
+    total_sell_value: 0,
+    low_stock_count: 0,
+    out_of_stock_count: 0,
+  })
+  const [movements, setMovements] = useState([])
+  const [movementsLoading, setMovementsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [tableLoading, setTableLoading] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const [compareMode, setCompareMode] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [totalPages, setTotalPages] = useState(1)
+  const [activeSubTab, setActiveSubTab] = useState('inventory') // 'inventory' | 'movements' | 'compare'
+  const [stockFilter, setStockFilter] = useState('all') // 'all' | 'low' | 'out'
   const [compareData, setCompareData] = useState([])
   const [compareLoading, setCompareLoading] = useState(false)
   const [dateA, setDateA] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 7)
-    return d.toISOString().slice(0,10)
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
   })
-  const [dateB, setDateB] = useState(() => new Date().toISOString().slice(0,10))
-
+  const [dateB, setDateB] = useState(() => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,10))
+  const [compareError, setCompareError] = useState('')
   const [warehouses, setWarehouses] = useState([])
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim())
+      setCurrentPage(1)
+    }, 250)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  const loadSummary = useCallback(async () => {
+    try {
+      const [s, whs] = await Promise.all([
+        typeof window.mgpos?.db?.getInventorySummary === 'function'
+          ? window.mgpos.db.getInventorySummary(from, to)
+          : Promise.resolve(null),
+        window.mgpos.warehouses.getAll().catch(() => [])
+      ])
+      if (s) setSummary(s)
+      if (whs && whs.length > 0) setWarehouses(whs)
+    } catch (err) {
+      console.error('Failed to load inventory summary:', err)
+    }
+  }, [from, to])
+
+  const loadPaginatedData = useCallback(async () => {
+    setTableLoading(true)
     setLoadError('')
     try {
-      const [d, whs] = await Promise.all([
-        window.mgpos.db.getFullInventory(from, to).catch((error) => {
-          if (error?.code === 'PERMISSION_DENIED') return []
-          throw error
-        }),
-        window.mgpos.warehouses.getAll().catch((error) => {
-          if (error?.code === 'PERMISSION_DENIED') return []
-          throw error
+      if (typeof window.mgpos?.db?.getInventoryPaginated === 'function') {
+        const res = await window.mgpos.db.getInventoryPaginated({
+          page: currentPage,
+          pageSize,
+          search,
+          stockFilter,
+          from,
+          to,
         })
-      ])
-      setData(d || [])
-      setWarehouses(whs || [])
+        setData(res?.products || [])
+        setTotalCount(res?.total || 0)
+        setTotalPages(res?.totalPages || 1)
+        if (res?.warehouses && res.warehouses.length > 0) {
+          setWarehouses(res.warehouses)
+        }
+      } else {
+        const d = await window.mgpos.db.getFullInventory(from, to)
+        setData(d || [])
+      }
     } catch (error) {
       console.error('Inventory report load failed:', error)
       setData([])
-      setWarehouses([])
-      setLoadError(error?.message || 'تعذر تحميل تقرير المخزون الآن.')
+      setLoadError(cleanError(error, 'تعذر تحميل بيانات تقرير المخزون.'))
     } finally {
+      setTableLoading(false)
       setLoading(false)
     }
-  }, [from, to])
-  useEffect(() => { loadData() }, [loadData])
+  }, [currentPage, pageSize, search, stockFilter, from, to])
 
-  const totalValue = data.reduce((s,p) => s + p.quantity * p.sell_price, 0)
-  const lowStock   = data.filter(p => p.quantity <= p.min_quantity).length
+  const loadMovements = useCallback(async () => {
+    setMovementsLoading(true)
+    try {
+      const m = await window.mgpos.reports.getStockMovementsReport(from, to, 250)
+      setMovements(Array.isArray(m) ? m : [])
+    } catch (e) {
+      console.error('Error loading stock movements:', e)
+      setMovements([])
+    } finally {
+      setMovementsLoading(false)
+    }
+  }, [from, to])
+
+  useEffect(() => { loadSummary() }, [loadSummary])
+  useEffect(() => { loadPaginatedData() }, [loadPaginatedData])
+
+  useEffect(() => {
+    if (activeSubTab === 'movements') {
+      loadMovements()
+    }
+  }, [activeSubTab, loadMovements])
 
   const unitLabel = (u) => ({ piece:'قطعة', kg:'وزن', meter:'متر', liter:'لتر', box:'علبة', pack:'باكت' })[u] || u
 
-  const filtered = data.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.category_name || '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filteredMovements = useMemo(() => {
+    if (!search) return movements
+    const term = search.toLowerCase()
+    return movements.filter(m => 
+      (m.product_name || '').toLowerCase().includes(term) ||
+      (m.barcode || '').includes(term) ||
+      (m.reason || '').toLowerCase().includes(term) ||
+      (m.username || '').toLowerCase().includes(term)
+    )
+  }, [movements, search])
 
   const filteredCompare = compareData.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -987,18 +2383,54 @@ function InventoryView({ from, to, currency }) {
   )
 
   async function handleCompare() {
+    if (compareLoading) return
     setCompareLoading(true)
-    const d = await window.mgpos.db.getStockComparison(dateA, dateB)
-    setCompareData(d || [])
-    setCompareLoading(false)
+    setCompareError('')
+    try {
+      const d = await window.mgpos.db.getStockComparison(dateA, dateB)
+      setCompareData(d || [])
+    } catch (e) {
+      console.error('Stock comparison failed:', e)
+      setCompareData([])
+      setCompareError(cleanError(e, 'تعذر تنفيذ المقارنة، حاول مرة تانية'))
+    } finally {
+      setCompareLoading(false)
+    }
   }
 
-  function exportData(type = 'xlsx') {
-    if (!data.length) return
-    const sheet = XLSX.utils.json_to_sheet(data)
+  async function exportData(type = 'xlsx') {
+    setIsExporting(true)
+    try {
+      const fullList = await window.mgpos.db.getFullInventory(from, to)
+      if (!fullList || !fullList.length) return
+      const sheet = XLSX.utils.json_to_sheet(safeRows(fullList))
+      const book = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(book, sheet, 'Inventory')
+      XLSX.writeFile(book, `inventory-${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,10)}.${type}`)
+    } catch (e) {
+      console.error('Export failed:', e)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  function exportMovements() {
+    if (!filteredMovements.length) return
+    const exportRows = filteredMovements.map((m, idx) => ({
+      'م': idx + 1,
+      'التاريخ والوقت': parseDate(m.created_at).toLocaleString('en-GB'),
+      'المنتج': m.product_name,
+      'الباركود': m.barcode || '—',
+      'نوع الحركة': m.type,
+      'الكمية': m.quantity,
+      'الرصيد بعد الحركة': m.balance_after,
+      'المسؤول': m.username || '—',
+      'السبب / الملاحظات': m.reason || '—',
+    }))
+    const sheet = XLSX.utils.json_to_sheet(safeRows(exportRows))
     const book = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(book, sheet, 'Inventory')
-    XLSX.writeFile(book, `inventory-${new Date().toISOString().slice(0,10)}.${type}`)
+    XLSX.utils.book_append_sheet(book, sheet, 'Stock_Movements')
+    XLSX.writeFile(book, `stock-movements-${from}-to-${to}.xlsx`)
   }
 
   function exportComparison() {
@@ -1006,12 +2438,12 @@ function InventoryView({ from, to, currency }) {
     const exportRows = compareData.map(p => ({
       'المنتج': p.name,
       'الفئة': p.category_name || '',
-      [`المخزون ي ${dateA}`]: p.stock_at_a,
-      [`المخزون ي ${dateB}`]: p.stock_at_b,
-      'الرق': p.diff,
+      [`المخزون في ${dateA}`]: p.stock_at_a,
+      [`المخزون في ${dateB}`]: p.stock_at_b,
+      'الفرق': p.diff,
       'الحالة': p.diff > 0 ? 'زيادة' : p.diff < 0 ? 'نقص' : 'ثابت'
     }))
-    const sheet = XLSX.utils.json_to_sheet(exportRows)
+    const sheet = XLSX.utils.json_to_sheet(safeRows(exportRows))
     const book = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(book, sheet, 'Stock Comparison')
     XLSX.writeFile(book, `stock-comparison-${dateA}-vs-${dateB}.xlsx`)
@@ -1021,134 +2453,488 @@ function InventoryView({ from, to, currency }) {
   if (loadError) return <div className="py-24 text-center text-amber-600 font-bold">{loadError}</div>
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard icon={Package} label="عدد المنتجات" value={data.length} color="blue" />
-        <StatCard icon={AlertTriangle} label="مخزون منخفض" value={lowStock} color="red" sub="دون الحد الأدنى" />
-        <StatCard icon={DollarSign} label="قيمة المخزون الحالي" value={`${fmt(totalValue)} ${currency}`} color="green" />
+    <div className="space-y-5 animate-fadeIn">
+      {/* ── KPI Metric Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        <StatCard icon={Package} label="عدد الأصناف المسجلة" value={summary.total_items} color="blue" />
+        <StatCard icon={AlertTriangle} label="نواقص المخزون" value={summary.low_stock_count} color="amber" sub="دون الحد الأدنى" />
+        <StatCard icon={AlertTriangle} label="أصناف نافدة تماماً" value={summary.out_of_stock_count} color="red" sub="رصيد 0 أو سالب" />
+        <StatCard icon={DollarSign} label="تقييم المخزون بسعر الشراء" value={isCostMasked ? '***' : `${fmt(summary.total_cost_value)} ${currency}`} color="slate" sub="رأس المال المخزن" />
+        <StatCard icon={TrendingUp} label="تقييم المخزون بسعر البيع" value={`${fmt(summary.total_sell_value)} ${currency}`} color="green" sub={isCostMasked ? undefined : `ربح تقديري: ${fmt(summary.total_sell_value - summary.total_cost_value)}`} />
       </div>
 
-      {/* Toggle + Search + Export */}
-      <div className="bg-white rounded-[1.5rem] p-5 shadow-xl border border-slate-100 flex flex-wrap gap-4 items-end">
-        <div className="space-y-2 flex-1 min-w-[240px]">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Search size={12} className="text-emerald-800"/> بحث عن منتج</label>
-          <div className="relative">
-            <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="اسم المنتج أو الفئة..."
-              className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-11 py-3 text-sm font-bold text-slate-700 outline-none"/>
-            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setCompareMode(!compareMode)}
-            className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-black transition active:scale-95 ${
-              compareMode
-                ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-200'
-                : 'bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200'
-            }`}>
-            <BarChart3 size={14}/> مقارنة المخزون
+      {/* ── Sub-tabs Navigation Bar ── */}
+      <div className="bg-white rounded-2xl p-2 border border-slate-200/80 shadow-2xs flex flex-wrap gap-2 items-center justify-between">
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <button
+            onClick={() => setActiveSubTab('inventory')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeSubTab === 'inventory'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Package size={14} />
+            <span>جرد وتقييم المخزون</span>
           </button>
-          {!compareMode && (
-            <>
-              <button onClick={()=>exportData('xlsx')} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-2xl text-xs font-black transition active:scale-95"><Download size={14}/> Excel</button>
-              <button onClick={()=>exportData('csv')}  className="flex items-center gap-2 bg-slate-800 hover:bg-black text-white px-5 py-3 rounded-2xl text-xs font-black transition active:scale-95"><FileText size={14}/> CSV</button>
-            </>
+
+          <button
+            onClick={() => setActiveSubTab('movements')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeSubTab === 'movements'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <ArrowUpRight size={14} />
+            <span>سجل حركة المخزون (Movements)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('compare')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeSubTab === 'compare'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <BarChart3 size={14} />
+            <span>مقارنة رصيد المخزون بين تاريخين</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {activeSubTab === 'inventory' && (
+            <button
+              onClick={() => exportData('xlsx')}
+              disabled={isExporting}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-emerald-700 hover:text-white text-slate-700 text-xs font-black transition border border-slate-200 cursor-pointer disabled:opacity-50"
+            >
+              {isExporting ? <RefreshCw size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+              <span>{isExporting ? 'جاري تصدير الجرد...' : 'تصدير إكسيل'}</span>
+            </button>
           )}
-          <button onClick={loadData} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white text-emerald-800 border border-slate-100 shadow-sm hover:shadow-md transition"><RefreshCw size={20}/></button>
+          {activeSubTab === 'movements' && (
+            <button
+              onClick={exportMovements}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-emerald-700 hover:text-white text-slate-700 text-xs font-black transition border border-slate-200 cursor-pointer"
+            >
+              <FileSpreadsheet size={14} />
+              <span>تصدير الحركات إكسيل</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Section */}
-      {compareMode && (
-        <div className="bg-gradient-to-r from-violet-50 to-emerald-50 rounded-[2rem] p-6 border border-violet-200 shadow-lg space-y-5">
-          <div className="flex items-center justify-between">
-            <h3 className="font-black text-violet-800 text-lg flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-violet-600 text-white flex items-center justify-center shadow-lg"><BarChart3 size={18}/></div>
-              مقارنة المخزون بين تاريخين
-            </h3>
-            <button onClick={() => setCompareMode(false)} className="text-xs text-slate-400 hover:text-red-500 font-bold transition">✕ إغلاق</button>
+      {/* ── Sub-tab 1: Inventory List View ── */}
+      {activeSubTab === 'inventory' && (
+        <div className="space-y-4">
+          {/* Toolbar */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+              {/* Search */}
+              <div className="relative flex-1 max-w-sm flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                <Search size={15} className="text-slate-400 ml-2" />
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  aria-label="بحث في الجرد" placeholder="ابحث بالاسم أو الباركود أو الفئة..."
+                  className="bg-transparent text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-none w-full"
+                />
+              </div>
+
+              {/* Status filter buttons */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                <button
+                  onClick={() => { setStockFilter('all'); setCurrentPage(1); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                    stockFilter === 'all' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600'
+                  }`}
+                >
+                  الكل ({summary.total_items})
+                </button>
+                <button
+                  onClick={() => { setStockFilter('low'); setCurrentPage(1); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                    stockFilter === 'low' ? 'bg-white text-amber-700 shadow-xs' : 'text-slate-600'
+                  }`}
+                >
+                  النواقص ({summary.low_stock_count})
+                </button>
+                <button
+                  onClick={() => { setStockFilter('out'); setCurrentPage(1); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                    stockFilter === 'out' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-600'
+                  }`}
+                >
+                  النافد ({summary.out_of_stock_count})
+                </button>
+              </div>
+
+              {/* Page size selector */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-500">لكل صفحة:</span>
+                <select
+                  value={pageSize}
+                  aria-label="عدد الصفوف في الصفحة" onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="text-xs font-bold text-slate-400">
+              إجمالي النتائج: <span className="text-emerald-700 font-mono font-black">{totalCount.toLocaleString()}</span> صنف
+            </div>
           </div>
-          <div className="flex items-end gap-4 bg-white rounded-2xl p-4 border border-violet-100">
-            <div className="space-y-2 flex-1">
-              <label className="text-[10px] font-black text-violet-500 uppercase tracking-widest">التاريخ الأول (A)</label>
-              <input type="date" value={dateA} onChange={e => setDateA(e.target.value)}
-                className="w-full bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-violet-500"/>
+
+          {/* Table */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 sticky top-0 z-10 text-slate-500 border-b border-slate-200">
+                  <tr>
+                    <th className="px-5 py-3.5 text-right font-black uppercase">المنتج والباركود</th>
+                    <th className="px-4 py-3.5 text-center font-black uppercase">الفئة</th>
+                    <th className="px-4 py-3.5 text-center font-black uppercase">الوحدة</th>
+                    {warehouses.map(w => (
+                      <th
+                        key={w.id}
+                        className="px-4 py-3.5 text-center font-black uppercase"
+                        style={{ backgroundColor: `${w.color || '#059669'}10`, color: w.color || '#059669' }}
+                      >
+                        {w.name}
+                      </th>
+                    ))}
+                    <th className="px-4 py-3.5 text-center font-black uppercase">الرصيد الإجمالي</th>
+                    <th className="px-4 py-3.5 text-center font-black uppercase">سعر الشراء</th>
+                    <th className="px-4 py-3.5 text-center font-black uppercase">سعر البيع</th>
+                    <th className="px-4 py-3.5 text-center font-black uppercase">القيمة الإجمالية</th>
+                    <th className="px-5 py-3.5 text-center font-black uppercase">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-bold">
+                  {tableLoading ? (
+                    <tr>
+                      <td colSpan={9 + warehouses.length} className="px-6 py-12 text-center text-slate-400 font-black">
+                        <RefreshCw className="animate-spin inline-block ml-2 text-emerald-600" size={18} />
+                        جاري تحميل البيانات...
+                      </td>
+                    </tr>
+                  ) : data.length === 0 ? (
+                    <tr>
+                      <td colSpan={9 + warehouses.length} className="px-6 py-12 text-center text-slate-400 font-black">
+                        لا توجد أصناف مطابقة للبحث أو الفلتر
+                      </td>
+                    </tr>
+                  ) : (
+                    data.map((p, i) => {
+                      const q = Number(p.quantity || 0)
+                      const min = Number(p.min_quantity || 0)
+                      const isOut = q <= 0
+                      const isLow = q > 0 && q <= min
+                      const rowVal = q * Number(p.sell_price || 0)
+
+                      return (
+                        <tr key={p.id || i} className="hover:bg-emerald-50/40 transition">
+                          <td className="px-5 py-3.5 text-right">
+                            <div className="font-black text-slate-800 text-sm">{p.name}</div>
+                            {p.barcode && <div className="text-[10px] text-slate-400 font-mono mt-0.5">{p.barcode}</div>}
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg text-[10px] font-black">
+                              {p.category_name || 'غير مصنف'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className="text-slate-500 font-mono text-[11px]">{unitLabel(p.unit)}</span>
+                          </td>
+                          {warehouses.map(w => {
+                            const wQty = p.warehouse_quantities?.[w.id] ?? (w.is_pos_source ? (p.store_quantity ?? 0) : w.is_default ? (p.main_quantity ?? 0) : 0)
+                            return (
+                              <td key={w.id} className="px-4 py-3.5 text-center font-mono font-black" style={{ backgroundColor: `${w.color || '#059669'}05` }}>
+                                <span className={wQty <= min && w.is_pos_source ? 'text-rose-600' : 'text-slate-800'}>
+                                  {wQty}
+                                </span>
+                              </td>
+                            )
+                          })}
+                          <td className="px-4 py-3.5 text-center font-mono font-black text-slate-900 text-sm">
+                            {q}
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-mono text-slate-500">
+                            {isCostMasked ? '***' : fmt(p.cost_price)}
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-mono text-slate-800">
+                            {fmt(p.sell_price)}
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-mono font-black text-emerald-800">
+                            {fmt(rowVal)}
+                          </td>
+                          <td className="px-5 py-3.5 text-center">
+                            <span
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${
+                                isOut
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : isLow
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-green-100 text-green-800'
+                              }`}
+                            >
+                              {isOut ? 'نافد' : isLow ? 'منخفض' : 'متوفر'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
-            <div className="text-2xl text-violet-300 font-black pb-2">⇄</div>
-            <div className="space-y-2 flex-1">
-              <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">التاريخ الثاني (B)</label>
-              <input type="date" value={dateB} onChange={e => setDateB(e.target.value)}
-                className="w-full bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500"/>
+
+            {/* Pagination footer */}
+            {totalCount > 0 && (
+              <div className="px-5 py-3.5 bg-slate-50/90 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs font-bold text-slate-600">
+                <div>
+                  عرض من <span className="font-mono font-black text-slate-900">{((currentPage - 1) * pageSize) + 1}</span> إلى{' '}
+                  <span className="font-mono font-black text-slate-900">{Math.min(currentPage * pageSize, totalCount)}</span> من إجمالي{' '}
+                  <span className="font-mono font-black text-emerald-700">{totalCount.toLocaleString()}</span> صنف
+                </div>
+
+                <div className="flex items-center gap-1.5" dir="ltr">
+                  <button
+                    aria-label="الصفحة الأولى" onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1 || tableLoading}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="الصفحة الأولى"
+                  >
+                    «
+                  </button>
+                  <button
+                    aria-label="السابق" onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1 || tableLoading}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="السابق"
+                  >
+                    ‹
+                  </button>
+                  <span className="px-3 py-1 font-mono font-black bg-white border border-slate-200 rounded-lg text-slate-800 text-xs">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    aria-label="التالي" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages || tableLoading}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="التالي"
+                  >
+                    ›
+                  </button>
+                  <button
+                    aria-label="الصفحة الأخيرة" onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage >= totalPages || tableLoading}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="الصفحة الأخيرة"
+                  >
+                    »
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Sub-tab 2: Stock Movements View ── */}
+      {activeSubTab === 'movements' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
+            <div className="relative flex-1 max-w-sm flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <Search size={15} className="text-slate-400 ml-2" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                aria-label="بحث في حركات المخزون" placeholder="ابحث باسم المنتج، نوع الحركة، أو المسؤول..."
+                className="bg-transparent text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-none w-full"
+              />
             </div>
-            <button onClick={handleCompare} disabled={compareLoading}
-              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-8 py-3 rounded-xl font-black text-sm transition shadow-lg flex items-center gap-2">
-              {compareLoading ? <RefreshCw size={14} className="animate-spin"/> : <BarChart3 size={14}/>}
-              قارن
+            <span className="text-xs font-bold text-slate-400">
+              سجل الحركات للفترة من {from} إلى {to} ({filteredMovements.length} حركة)
+            </span>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            {movementsLoading ? (
+              <div className="flex items-center justify-center h-48 text-slate-400 gap-2">
+                <RefreshCw className="animate-spin text-emerald-600" size={24} />
+                <span className="text-xs font-bold">جاري تحميل حركات المخزون...</span>
+              </div>
+            ) : (
+              <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0 z-10 text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="px-5 py-3.5 text-right font-black uppercase">التاريخ والوقت</th>
+                      <th className="px-5 py-3.5 text-right font-black uppercase">المنتج والباركود</th>
+                      <th className="px-4 py-3.5 text-center font-black uppercase">نوع الحركة</th>
+                      <th className="px-4 py-3.5 text-center font-black uppercase">الكمية</th>
+                      <th className="px-4 py-3.5 text-center font-black uppercase">الرصيد بعدها</th>
+                      <th className="px-4 py-3.5 text-center font-black uppercase">المسؤول</th>
+                      <th className="px-5 py-3.5 text-right font-black uppercase">السبب / الملاحظات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-bold">
+                    {filteredMovements.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-black">
+                          لا توجد حركات مخزنية مسجلة خلال هذه الفترة
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredMovements.map((m, idx) => {
+                        const isPositive = m.quantity > 0
+                        return (
+                          <tr key={idx} className="hover:bg-emerald-50/40 transition">
+                            <td className="px-5 py-3.5 text-right font-mono text-slate-500">
+                              {parseDate(m.created_at).toLocaleString('en-GB', { hour12: true })}
+                            </td>
+                            <td className="px-5 py-3.5 text-right">
+                              <span className="font-black text-slate-800 text-sm block">{m.product_name}</span>
+                              {m.barcode && <span className="text-[10px] text-slate-400 font-mono">{m.barcode}</span>}
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-[10px] font-black">
+                                {m.type === 'purchase' ? 'توريد شراء' : m.type === 'sale' ? 'صرف مبيعات' : m.type === 'return_sale' ? 'مرتجع مبيعات' : m.type === 'return_purchase' ? 'مرتجع لمورد' : m.type === 'adjustment' ? 'تسوية جردية' : m.type}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-black">
+                              <span className={isPositive ? 'text-green-700' : 'text-rose-600'}>
+                                {isPositive ? `+${m.quantity}` : m.quantity}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-black text-slate-800">
+                              {m.balance_after}
+                            </td>
+                            <td className="px-4 py-3.5 text-center text-slate-600">
+                              {m.username || 'النظام'}
+                            </td>
+                            <td className="px-5 py-3.5 text-right text-slate-500 text-[11px]">
+                              {m.reason || '—'}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Sub-tab 3: Compare View ── */}
+      {activeSubTab === 'compare' && (
+        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-5 border border-emerald-200/80 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-emerald-900 text-sm flex items-center gap-2">
+              <BarChart3 size={18} className="text-emerald-700" />
+              <span>مقارنة رصيد المخزون بين تاريخين محددين</span>
+            </h3>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3 bg-white rounded-xl p-4 border border-emerald-100">
+            <div className="space-y-1.5 flex-1 min-w-[160px]">
+              <label htmlFor="compare-date-a" className="text-[10px] font-black text-slate-500 uppercase">التاريخ الأول (A)</label>
+              <input
+                type="date"
+                id="compare-date-a" value={dateA}
+                onChange={e => setDateA(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none"
+              />
+            </div>
+            <div className="text-xl text-emerald-600 font-black pb-2">⇄</div>
+            <div className="space-y-1.5 flex-1 min-w-[160px]">
+              <label htmlFor="compare-date-b" className="text-[10px] font-black text-slate-500 uppercase">التاريخ الثاني (B)</label>
+              <input
+                type="date"
+                id="compare-date-b" value={dateB}
+                onChange={e => setDateB(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none"
+              />
+            </div>
+            <button
+              onClick={handleCompare}
+              disabled={compareLoading}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white px-6 py-2.5 rounded-xl font-black text-xs transition flex items-center gap-2 cursor-pointer shadow-xs"
+            >
+              {compareLoading ? <RefreshCw size={14} className="animate-spin" /> : <BarChart3 size={14} />}
+              <span>تنفيذ المقارنة</span>
             </button>
             {compareData.length > 0 && (
-              <button onClick={exportComparison}
-                className="bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-xl font-black text-sm transition shadow-lg flex items-center gap-2">
-                <Download size={14}/> تصدير
+              <button
+                onClick={exportComparison}
+                className="bg-slate-100 hover:bg-emerald-700 hover:text-white text-slate-700 px-4 py-2.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 cursor-pointer border border-slate-200"
+              >
+                <Download size={14} />
+                <span>تصدير</span>
               </button>
             )}
           </div>
 
-          {/* Comparison Results */}
+          {compareError && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">{compareError}</div>
+          )}
+
           {compareData.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
-              {/* Summary cards */}
-              <div className="grid grid-cols-3 gap-4 p-5 bg-slate-50 border-b border-slate-100">
-                <div className="bg-green-50 rounded-xl p-3 border border-green-100 text-center">
-                  <p className="text-[10px] font-black text-green-600 uppercase">منتجات زادت</p>
-                  <p className="text-2xl font-black text-green-700">{compareData.filter(p => p.diff > 0).length}</p>
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 border-b border-slate-200 text-center">
+                <div className="bg-green-50 p-2.5 rounded-xl border border-green-200">
+                  <span className="text-[10px] font-black text-green-700 uppercase block">منتجات زادت</span>
+                  <span className="text-xl font-black font-mono text-green-800">{compareData.filter(p => p.diff > 0).length}</span>
                 </div>
-                <div className="bg-red-50 rounded-xl p-3 border border-red-100 text-center">
-                  <p className="text-[10px] font-black text-red-600 uppercase">منتجات نقصت</p>
-                  <p className="text-2xl font-black text-red-700">{compareData.filter(p => p.diff < 0).length}</p>
+                <div className="bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+                  <span className="text-[10px] font-black text-rose-700 uppercase block">منتجات نقصت</span>
+                  <span className="text-xl font-black font-mono text-rose-800">{compareData.filter(p => p.diff < 0).length}</span>
                 </div>
-                <div className="bg-slate-100 rounded-xl p-3 border border-slate-200 text-center">
-                  <p className="text-[10px] font-black text-slate-500 uppercase">بدون تغيير</p>
-                  <p className="text-2xl font-black text-slate-600">{compareData.filter(p => p.diff === 0).length}</p>
+                <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-black text-slate-600 uppercase block">ثابتة دون تغيير</span>
+                  <span className="text-xl font-black font-mono text-slate-700">{compareData.filter(p => p.diff === 0).length}</span>
                 </div>
               </div>
-              <div className="overflow-auto max-h-[500px] custom-scrollbar">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 sticky top-0 z-10 text-slate-400 border-b border-slate-100">
+
+              <div className="overflow-x-auto max-h-[500px] custom-scrollbar">
+                <table className="w-full text-xs font-bold">
+                  <thead className="bg-slate-50 sticky top-0 z-10 text-slate-500 border-b border-slate-200">
                     <tr>
-                      <th className="px-6 py-4 text-right font-black text-[10px] uppercase">المنتج</th>
-                      <th className="px-6 py-4 text-center font-black text-[10px] uppercase">الفئة</th>
-                      <th className="px-6 py-4 text-center font-black text-[10px] uppercase bg-violet-50 text-violet-600">
-                        المخزون ي {dateA}
-                      </th>
-                      <th className="px-6 py-4 text-center font-black text-[10px] uppercase bg-emerald-50 text-emerald-600">
-                        المخزون ي {dateB}
-                      </th>
-                      <th className="px-6 py-4 text-center font-black text-[10px] uppercase">الرق</th>
-                      <th className="px-6 py-4 text-center font-black text-[10px] uppercase">الحالة</th>
+                      <th className="px-5 py-3 text-right">المنتج</th>
+                      <th className="px-4 py-3 text-center">الفئة</th>
+                      <th className="px-4 py-3 text-center bg-slate-100">المخزون في {dateA}</th>
+                      <th className="px-4 py-3 text-center bg-emerald-50 text-emerald-800">المخزون في {dateB}</th>
+                      <th className="px-4 py-3 text-center">الفرق</th>
+                      <th className="px-4 py-3 text-center">الحالة</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {filteredCompare.map((p,i) => (
-                      <tr key={i} className={`hover:bg-slate-50/50 transition ${
-                        p.diff > 0 ? 'border-r-4 border-r-green-400' :
-                        p.diff < 0 ? 'border-r-4 border-r-red-400' : 'border-r-4 border-r-transparent'
-                      }`}>
-                        <td className="px-6 py-4 font-black text-slate-800">{p.name}</td>
-                        <td className="px-6 py-4 text-center text-slate-500 font-bold text-xs">{p.category_name || ''}</td>
-                        <td className="px-6 py-4 text-center font-black font-mono text-base bg-violet-50/30">{p.stock_at_a}</td>
-                        <td className="px-6 py-4 text-center font-black font-mono text-base bg-emerald-50/30">{p.stock_at_b}</td>
-                        <td className="px-6 py-4 text-center">
-                          <span className={`inline-flex items-center gap-1 font-black font-mono text-base ${
-                            p.diff > 0 ? 'text-green-600' : p.diff < 0 ? 'text-red-600' : 'text-slate-400'
-                          }`}>
-                            {p.diff > 0 ? '▲' : p.diff < 0 ? '▼' : ''}
-                            {p.diff !== 0 && ` ${Math.abs(p.diff)}`}
+                  <tbody className="divide-y divide-slate-100 font-mono">
+                    {filteredCompare.map((p, i) => (
+                      <tr key={i} className="hover:bg-slate-50 transition font-bold">
+                        <td className="px-5 py-3 font-sans text-slate-800">{p.name}</td>
+                        <td className="px-4 py-3 text-center font-sans text-slate-500 text-[11px]">{p.category_name || '—'}</td>
+                        <td className="px-4 py-3 text-center text-slate-700 bg-slate-50/50">{p.stock_at_a}</td>
+                        <td className="px-4 py-3 text-center text-emerald-800 bg-emerald-50/30">{p.stock_at_b}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={p.diff > 0 ? 'text-green-700' : p.diff < 0 ? 'text-rose-600' : 'text-slate-400'}>
+                            {p.diff > 0 ? `+${p.diff}` : p.diff}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className={`px-3 py-1 rounded-xl text-[10px] font-black ${
-                            p.diff > 0 ? 'bg-green-100 text-green-700' :
-                            p.diff < 0 ? 'bg-red-100 text-red-600' :
-                            'bg-slate-100 text-slate-500'
+                        <td className="px-4 py-3 text-center font-sans">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+                            p.diff > 0 ? 'bg-green-100 text-green-800' : p.diff < 0 ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'
                           }`}>
                             {p.diff > 0 ? 'زيادة' : p.diff < 0 ? 'نقص' : 'ثابت'}
                           </span>
@@ -1162,1015 +2948,866 @@ function InventoryView({ from, to, currency }) {
           )}
         </div>
       )}
-
-      {/* Section */}
-      {!compareMode && (
-        <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden">
-          <div className="overflow-auto max-h-[700px] custom-scrollbar">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 sticky top-0 z-10 text-slate-400 border-b border-slate-100">
-                <tr>
-                  <th className="px-8 py-5 text-right font-black text-[10px] uppercase">المنتج</th>
-                  <th className="px-8 py-5 text-center font-black text-[10px] uppercase">الفئة</th>
-                  <th className="px-8 py-5 text-center font-black text-[10px] uppercase">الوحدة</th>
-                  {warehouses.map(w => (
-                    <th key={w.id} className="px-6 py-5 text-center font-black text-[10px] uppercase" style={{ backgroundColor: `${w.color || '#6366f1'}15`, color: w.color || '#6366f1' }}>
-                      {w.is_pos_source ? '' : w.is_default ? '' : '📦'} {w.name}
-                    </th>
-                  ))}
-                  <th className="px-8 py-5 text-center font-black text-[10px] uppercase">الإجمالي</th>
-                  <th className="px-8 py-5 text-center font-black text-[10px] uppercase">سعر البيع</th>
-                  <th className="px-8 py-5 text-center font-black text-[10px] uppercase">الكمية المباعة</th>
-                  <th className="px-8 py-5 text-center font-black text-[10px] uppercase">الحالة</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filtered.map((p,i) => (
-                  <tr key={i} className={`hover:bg-emerald-50/20 transition ${p.quantity <= p.min_quantity ? 'border-r-4 border-r-red-400' : 'border-r-4 border-r-transparent'}`}>
-                    <td className="px-8 py-5 font-black text-slate-800">{p.name}</td>
-                    <td className="px-8 py-5 text-center text-slate-500 font-bold text-xs">{p.category_name || ''}</td>
-                    <td className="px-8 py-5 text-center"><span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-xl text-[10px] font-black">{unitLabel(p.unit)}</span></td>
-                    {warehouses.map(w => {
-                      const qty = p.warehouse_quantities?.[w.id] ?? (w.is_pos_source ? (p.store_quantity ?? 0) : w.is_default ? (p.main_quantity ?? 0) : 0)
-                      return (
-                        <td key={w.id} className="px-6 py-5 text-center" style={{ backgroundColor: `${w.color || '#6366f1'}08` }}>
-                          <span className={`text-xl font-black ${qty <= p.min_quantity && w.is_pos_source ? 'text-red-600' : 'text-slate-800'}`}>
-                            {qty}
-                          </span>
-                        </td>
-                      )
-                    })}
-                    <td className="px-8 py-5 text-center font-black font-mono text-base text-slate-800">{p.quantity}</td>
-                    <td className="px-8 py-5 text-center font-mono font-bold text-emerald-900">{fmt(p.sell_price)}</td>
-                    <td className="px-8 py-5 text-center font-black text-emerald-700">{p.sold_qty || 0}</td>
-                    <td className="px-8 py-5 text-center">
-                      <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black ${ p.quantity <= p.min_quantity ? 'bg-red-100 text-red-600' : p.quantity <= p.min_quantity * 2 ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600' }`}>
-                        {p.quantity <= p.min_quantity ? 'حرج' : p.quantity <= p.min_quantity * 2 ? 'منخفض' : 'جيد'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
-const EXPENSE_CATEGORIES = ['عام', 'إيجار', 'كهرباء ومياة', 'رواتب', 'صيانة', 'مواد تشغيل', 'نقل', 'أخرى']
-function ExpensesView({ from, to, currency, user }) {
-  const [data, setData] = useState([])
-  const [summary, setSummary] = useState([])
+// ExpensesView imported from ./ExpensesView.jsx
+// ReturnsView imported from ./ReturnsView.jsx
+// ── Purchases View Component (NEW) ──────────────────────────────────────────
+function PurchasesView({ from, to, currency, settings, user }) {
+  const isCostMasked = shouldMaskCostPrice(user)
+  const [invoices, setInvoices] = useState([])
+  const [productPurchases, setProductPurchases] = useState([])
+  const [purchasesSubTab, setPurchasesSubTab] = useState('invoices') // 'invoices' | 'by_product'
+  const [suppliers, setSuppliers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showAdd, setShowAdd] = useState(false)
-  const [expenseError, setExpenseError] = useState('')
-  const [deleteExpenseId, setDeleteExpenseId] = useState(null)
-  const [payExpenseId, setPayExpenseId] = useState(null)
-  const [editingExpense, setEditingExpense] = useState(null)
-  const [form, setForm] = useState({ title: '', amount: '', category: 'عام', notes: '', status: 'paid' })
-
-  const loadData = useCallback(async () => {
-    try {
-      const [d, s] = await Promise.all([
-        window.mgpos.db.getExpenses(from, to),
-        window.mgpos.db.getExpenseSummary(from, to)
-      ])
-      setData(d || [])
-      setSummary(s || [])
-    } catch (err) {
-      console.error('ExpensesView load error:', err)
-      setData([])
-      setSummary([])
-    } finally {
-      setLoading(false)
-    }
-  }, [from, to])
-  useEffect(() => { loadData() }, [loadData])
-
-  function resetForm() {
-    setForm({ title: '', amount: '', category: EXPENSE_CATEGORIES[0], notes: '', status: 'paid' })
-    setEditingExpense(null)
-    setShowAdd(false)
-  }
-
-  function openCreateForm() {
-    setForm({ title: '', amount: '', category: EXPENSE_CATEGORIES[0], notes: '', status: 'paid' })
-    setEditingExpense(null)
-    setShowAdd(true)
-  }
-
-  function openEditForm(expense) {
-    setForm({
-      title: expense.title || '',
-      amount: String(expense.amount ?? ''),
-      category: expense.category || EXPENSE_CATEGORIES[0],
-      notes: expense.notes || '',
-      status: expense.status || 'paid',
-    })
-    setEditingExpense(expense)
-    setShowAdd(true)
-  }
-
-  const totalExpenses = data.filter(e => e.status === 'paid').reduce((s, e) => s + e.amount, 0)
-
-  async function handleAdd() {
-    if (!form.title?.trim() || !form.amount) return
-
-    const payload = {
-      ...form,
-      title: form.title.trim(),
-      notes: form.notes?.trim?.() || '',
-      amount: parseFloat(form.amount),
-      status: form.status,
-    }
-
-    try {
-      if (editingExpense?.id) {
-        await window.mgpos.db.updateExpense(editingExpense.id, payload)
-      } else {
-        await window.mgpos.db.addExpense({ ...payload, user_id: user?.id })
-      }
-
-      resetForm()
-      await loadData()
-    } catch (error) {
-      console.error('expense save failed', error)
-      setExpenseError(editingExpense ? 'تعذر تحديث المصروف.' : 'تعذر حفظ المصروف.')
-    }
-  }
-
-  async function handleDelete(id) {
-    await window.mgpos.db.deleteExpense(id)
-    setDeleteExpenseId(null)
-    loadData()
-  }
-
-  async function handlePay(id) {
-    try {
-      await window.mgpos.db.payExpense(id)
-      setPayExpenseId(null)
-      loadData()
-    } catch (error) {
-      console.error('expense pay failed', error)
-      setExpenseError('تعذر تنفيذ المصروف.')
-      setPayExpenseId(null)
-    }
-  }
-
-  function exportData() {
-    if (!data.length) return
-    const sheet = XLSX.utils.json_to_sheet(data)
-    const book = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(book, sheet, 'Expenses')
-    XLSX.writeFile(book, `expenses-${new Date().toISOString().slice(0,10)}.xlsx`)
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Summary Banner */}
-      <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3 blur-3xl"/>
-        <div className="relative z-10 flex items-center justify-between">
-          <div>
-            <h3 className="text-red-100 text-sm font-black mb-2 uppercase tracking-widest">إجمالي المصروفات</h3>
-            <p className="text-5xl font-black tracking-tighter italic">{fmt(totalExpenses)} <span className="text-lg font-bold opacity-40">{currency}</span></p>
-            <p className="text-red-200 text-xs mt-2 font-bold">
-              {data.filter(e => e.status === 'paid').length} تم التنفيذ
-              {data.some(e => e.status === 'pending') && ` | ${data.filter(e => e.status === 'pending').length} معلق`}
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <button onClick={openCreateForm} className="bg-white text-red-600 px-6 py-3 rounded-2xl font-black text-sm shadow-xl hover:scale-105 transition flex items-center gap-2">
-              <span className="text-lg leading-none">+</span> إضافة مصروف
-            </button>
-            <button onClick={exportData} className="bg-white/10 text-white px-6 py-3 rounded-2xl font-black text-sm border border-white/20 hover:bg-white/20 transition flex items-center gap-2">
-              <Download size={14}/> تصدير
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Add Form */}
-      {showAdd && (
-        <div role="dialog" aria-modal="true" className="bg-white rounded-[2rem] p-8 shadow-2xl border border-slate-100 animate-fadeIn">
-          <h4 className="font-black text-slate-800 text-lg mb-6 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
-              {editingExpense ? <Pencil size={16} /> : <span className="text-lg font-black">+</span>}
-            </div>
-            تسجيل مصروف جديد
-          </h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">عنوان المصروف</label>
-              <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="مثل: إيجار المحل..."
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none"/>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">المبلغ ({currency})</label>
-              <input type="number" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="0.00"
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none"/>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">التصنيف</label>
-              <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none">
-                {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ملاحظات</label>
-              <input value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="اختياري"
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none"/>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">حالة المصروف</label>
-              <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none">
-                <option value="paid">تم التنفيذ (يخصم من الخزنة فورًا)</option>
-                <option value="pending">معلق (يُحفظ بدون خصم لحين تنفيذه)</option>
-              </select>
-            </div>
-          </div>
-          {expenseError && (
-            <div className="flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-600 border border-red-100 mt-4">
-              <AlertTriangle size={15} />
-              {expenseError}
-            </div>
-          )}
-          <div className="flex gap-3 mt-6">
-            <button onClick={handleAdd} className="bg-emerald-800 hover:bg-emerald-900 text-white px-8 py-3 rounded-2xl font-black text-sm transition shadow-lg">حفظ</button>
-            <button onClick={()=>setShowAdd(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-8 py-3 rounded-2xl font-black text-sm transition">إلغاء</button>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="overflow-auto max-h-[600px] custom-scrollbar">
-          {loading ? <div className="py-32 text-center"><RefreshCw className="animate-spin mx-auto" size={32}/></div> : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 sticky top-0 z-10 text-slate-400 border-b border-slate-100">
-              <tr>
-                <th className="px-8 py-5 text-right font-black text-[10px] uppercase">المصروف</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">التصنيف</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">الكاشير</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">التاريخ</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">المبلغ</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">الحالة</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase w-16">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {data.length === 0 ? (
-                <tr><td colSpan={6} className="py-20 text-center text-slate-300 font-bold">لا توجد مصروفات في هذه الفترة</td></tr>
-              ) : data.map(e => (
-                <tr key={e.id} className="hover:bg-red-50/30 transition">
-                  <td className="px-8 py-5 font-black text-slate-800">{e.title}<br/>{e.notes && <span className="text-[10px] text-slate-400 font-normal">{e.notes}</span>}</td>
-                  <td className="px-8 py-5 text-center"><span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-xl text-[10px] font-black">{e.category}</span></td>
-                  <td className="px-8 py-5 text-center text-slate-500 font-bold text-xs">{e.cashier_name || ''}</td>
-                  <td className="px-8 py-5 text-center text-slate-400 font-mono text-xs">{fmtDate(e.created_at)}</td>
-                  <td className="px-8 py-5 text-center font-black text-red-600 font-mono text-base">{fmt(e.amount)} <span className="text-xs opacity-30">{currency}</span></td>
-                  <td className="px-8 py-5 text-center">
-                    {e.status === 'paid' ? (
-                      <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-xl text-[10px] font-black flex items-center justify-center gap-1 w-max mx-auto">
-                        <Check size={12}/> تم التنفيذ
-                      </span>
-                    ) : (
-                      <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-xl text-[10px] font-black w-max mx-auto flex items-center justify-center">
-                        معلق
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-8 py-5 text-center">
-                    {canDo(user, 'settings.edit') && (
-                    <div className="flex items-center justify-center gap-2">
-                      {e.status !== 'paid' && (
-                        <button onClick={()=>setPayExpenseId(e.id)} title="تنفيذ المصروف (خصم من الخزنة)" className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition flex items-center justify-center">
-                          <Check size={15}/>
-                        </button>
-                      )}
-                      <button onClick={()=>openEditForm(e)} className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition flex items-center justify-center">
-                        <Pencil size={15}/>
-                      </button>
-                      <button onClick={()=>setDeleteExpenseId(e.id)} className="w-9 h-9 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition flex items-center justify-center">
-                        <X size={16}/>
-                      </button>
-                    </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          )}
-        </div>
-      </div>
-
-      {deleteExpenseId && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-sm" dir="rtl">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-100">
-            <p className="font-black text-slate-800 mb-2">حذف المصروف</p>
-            <p className="text-sm font-bold text-slate-500 mb-5">هتحذف المصروف ده؟ مش هيرجع تاني.</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleDelete(deleteExpenseId)}
-                className="flex-1 bg-red-600 text-white py-2.5 rounded-xl font-black text-sm hover:bg-red-700 transition"
-              >
-                تأكيد الحذف
-              </button>
-              <button
-                onClick={() => setDeleteExpenseId(null)}
-                className="flex-1 bg-slate-100 text-slate-600 py-2.5 rounded-xl font-black text-sm hover:bg-slate-200 transition"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {payExpenseId && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-sm" dir="rtl">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-100">
-            <p className="font-black text-slate-800 mb-2">تنفيذ المصروف</p>
-            <p className="text-sm font-bold text-slate-500 mb-5">هيتم خصم المبلغ من الخزنة دلوقتي. متأكد؟</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handlePay(payExpenseId)}
-                className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-black text-sm hover:bg-emerald-700 transition"
-              >
-                تأكيد التنفيذ
-              </button>
-              <button
-                onClick={() => setPayExpenseId(null)}
-                className="flex-1 bg-slate-100 text-slate-600 py-2.5 rounded-xl font-black text-sm hover:bg-slate-200 transition"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-function ReturnsView({ from, to, currency, user }) {
-  const [data, setData] = useState([])
-  const [products, setProducts] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showAdd, setShowAdd] = useState(false)
-  const [returnError, setReturnError] = useState('')
-  const [deleteReturnId, setDeleteReturnId] = useState(null)
-  const [editingReturn, setEditingReturn] = useState(null)
-  const [form, setForm] = useState({ product_id: '', quantity: '', reason: '' })
-
-  // Supplier Returns State
-  const [showSupplierReturn, setShowSupplierReturn] = useState(false)
-  const [suppliersList, setSuppliersList] = useState([])
-  const [selectedSupplierId, setSelectedSupplierId] = useState('')
-  const [supplierInvoices, setSupplierInvoices] = useState([])
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState('')
+  const [selectedSupplierId, setSelectedSupplierId] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [invoiceItems, setInvoiceItems] = useState([])
-  const [selectedItems, setSelectedItems] = useState({})
-  const [returnQuantities, setReturnQuantities] = useState({})
-  const [supplierReturnReason, setSupplierReturnReason] = useState('')
-  const [updateSupplierStatement, setUpdateSupplierStatement] = useState(true)
-  const [supplierReturnError, setSupplierReturnError] = useState('')
-  const [isSubmittingSupplierReturn, setIsSubmittingSupplierReturn] = useState(false)
+  const [itemsLoading, setItemsLoading] = useState(false)
 
-  async function openSupplierReturn() {
-    try {
-      const list = await window.mgpos.db.getSuppliers()
-      setSuppliersList(list || [])
-      setSelectedSupplierId('')
-      setSupplierInvoices([])
-      setSelectedInvoiceId('')
-      setInvoiceItems([])
-      setSelectedItems({})
-      setReturnQuantities({})
-      setSupplierReturnReason('')
-      setUpdateSupplierStatement(true)
-      setSupplierReturnError('')
-      setShowSupplierReturn(true)
-      setShowAdd(false)
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  async function handleSupplierChange(supplierId) {
-    setSelectedSupplierId(supplierId)
-    setSelectedInvoiceId('')
-    setInvoiceItems([])
-    setSelectedItems({})
-    setReturnQuantities({})
-    setSupplierReturnError('')
-    if (!supplierId) {
-      setSupplierInvoices([])
-      return
-    }
-    try {
-      const invoices = await window.mgpos.db.getSupplierInvoices(parseInt(supplierId))
-      setSupplierInvoices(invoices || [])
-    } catch (e) {
-      console.error(e)
-      setSupplierInvoices([])
-    }
-  }
-
-  async function handleInvoiceChange(invoiceId) {
-    setSelectedInvoiceId(invoiceId)
-    setSelectedItems({})
-    setReturnQuantities({})
-    setSupplierReturnError('')
-    if (!invoiceId) {
-      setInvoiceItems([])
-      return
-    }
-    try {
-      const items = await window.mgpos.db.getPurchaseInvoiceItems(parseInt(invoiceId))
-      setInvoiceItems(items || [])
-      const qtys = {}
-      const selected = {}
-      items.forEach(item => {
-        qtys[item.id] = String(item.quantity)
-        selected[item.id] = false
-      })
-      setReturnQuantities(qtys)
-      setSelectedItems(selected)
-    } catch (e) {
-      console.error(e)
-      setInvoiceItems([])
-    }
-  }
-
-  async function handleSaveSupplierReturn() {
-    const selectedItemIds = Object.keys(selectedItems).filter(id => selectedItems[id])
-    if (selectedItemIds.length === 0) {
-      setSupplierReturnError('يرجى تحديد منتج واحد على الأقل لإرجاعه.')
-      return
-    }
-
-    const itemsToReturn = []
-    for (const itemIdStr of selectedItemIds) {
-      const itemId = parseInt(itemIdStr)
-      const item = invoiceItems.find(i => i.id === itemId)
-      if (!item) continue
-
-      const qty = parseFloat(returnQuantities[itemId])
-      if (Number.isNaN(qty) || qty <= 0) {
-        setSupplierReturnError(`الكمية المحددة للمنتج "${item.product_name}" غير صحيحة.`)
-        return
-      }
-
-      if (qty > item.quantity) {
-        setSupplierReturnError(`الكمية المرجعة للمنتج "${item.product_name}" لا يمكن أن تتجاوز الكمية المشتراة في الفاتورة (${item.quantity}).`)
-        return
-      }
-
-      const product = products.find(p => p.id === item.product_id)
-      const currentStock = product ? Number(product.quantity ?? 0) : 0
-      if (qty > currentStock) {
-        setSupplierReturnError(`الكمية المرجعة للمنتج "${item.product_name}" لا يمكن أن تتجاوز المخزون الحالي المتاح (${currentStock}).`)
-        return
-      }
-
-      itemsToReturn.push({
-        product_id: item.product_id,
-        product_name: item.product_name,
-        quantity: qty,
-        cost_price: item.cost_price,
-        warehouse_id: item.warehouse_id,
-      })
-    }
-
-    setIsSubmittingSupplierReturn(true)
-    setSupplierReturnError('')
-    try {
-      await window.mgpos.db.returnToSupplier(
-        parseInt(selectedSupplierId),
-        selectedInvoiceId ? parseInt(selectedInvoiceId) : null,
-        itemsToReturn,
-        supplierReturnReason,
-        updateSupplierStatement,
-        user?.id
-      )
-      
-      setShowSupplierReturn(false)
-      loadData()
-      window.dispatchEvent(new Event('products-updated'))
-      window.dispatchEvent(new Event('stock-updated'))
-      window.dispatchEvent(new Event('dashboard:refresh'))
-    } catch (e) {
-      console.error(e)
-      setSupplierReturnError(e?.message || 'حدث خطأ أثناء حفظ المرتجع للمورد')
-    } finally {
-      setIsSubmittingSupplierReturn(false)
-    }
-  }
-
-  function resetForm() {
-    setForm({ product_id: '', quantity: '', reason: '' })
-    setEditingReturn(null)
-    setShowAdd(false)
-  }
-
-  function openCreateForm() {
-    setForm({ product_id: '', quantity: '', reason: '' })
-    setEditingReturn(null)
-    setShowAdd(true)
-    setShowSupplierReturn(false) // Close supplier returns if open
-  }
-
-  function openEditForm(r) {
-    setForm({
-      product_id: String(r.product_id),
-      quantity: String(r.quantity),
-      reason: r.reason || '',
-    })
-    setEditingReturn(r)
-    setShowAdd(true)
-    setShowSupplierReturn(false) // Close supplier returns if open
-  }
-
+  const loadSeq = useRef(0)
   const loadData = useCallback(async () => {
+    const seq = ++loadSeq.current
+    setLoading(true)
     try {
-      const [d, prods] = await Promise.all([
-        window.mgpos.db.getReturns(from, to),
-        window.mgpos.db.getProducts()
+      const [sups, prodPurchases, allInvs] = await Promise.all([
+        window.mgpos.db.getSuppliers().catch(() => []),
+        window.mgpos.reports.getPurchasesByProduct(from, to).catch(() => []),
+        window.mgpos.reports.getPurchaseInvoicesReport(from, to).catch(() => []),
       ])
-      setData(d || [])
-      setProducts(prods || [])
-    } catch (err) {
-      console.error('ReturnsView load error:', err)
-      setData([])
-      setProducts([])
+      if (seq !== loadSeq.current) return
+      setSuppliers(sups || [])
+      setProductPurchases(Array.isArray(prodPurchases) ? prodPurchases : [])
+      setInvoices(Array.isArray(allInvs) ? allInvs : [])
+    } catch (e) {
+      if (seq !== loadSeq.current) return
+      console.error('PurchasesView load error:', e)
+      setInvoices([])
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
   }, [from, to])
+
   useEffect(() => { loadData() }, [loadData])
 
-  const [returnsFilter, setReturnsFilter] = useState('all')
-
-  const filteredData = data.filter(r => {
-    if (returnsFilter === 'customer') return !r.type || r.type === 'customer'
-    if (returnsFilter === 'supplier') return r.type === 'supplier'
-    return true
-  })
-
-  const totalReturns = filteredData.reduce((s, r) => s + r.total, 0)
-  const selectedProduct = products.find(p => p.id === parseInt(form.product_id))
-  const availableNow = selectedProduct
-    ? Number(selectedProduct.store_quantity ?? selectedProduct.quantity ?? 0)
-    : 0
-  const editOriginalQty = editingReturn && selectedProduct && Number(editingReturn.product_id) === Number(selectedProduct.id)
-    ? Number(editingReturn.quantity || 0)
-    : 0
-  const maxAllowedQty = Math.max(0, availableNow + editOriginalQty)
-  const enteredQty = Number(form.quantity || 0)
-  const exceedsAvailable = enteredQty > maxAllowedQty
-
-  async function handleSave() {
-    if (!form.product_id || !form.quantity) return
-    const nextQty = Number(form.quantity)
-    if (!Number.isFinite(nextQty) || nextQty <= 0) {
-      setReturnError('أدخل كمية صحيحة أكبر من صفر')
-      return
-    }
-    if (!selectedProduct) {
-      setReturnError('اختر المنتج أولًا')
-      return
-    }
-    if (nextQty > maxAllowedQty) {
-      setReturnError(`لا يمكن تسجيل كمية مرتجع أكبر من المتاح حاليًا. المتاح: ${fmt(maxAllowedQty)}`)
-      return
-    }
-
-    const payload = {
-      product_id: parseInt(form.product_id),
-      quantity: nextQty,
-      reason: form.reason || '',
-    }
-
-    try {
-      if (editingReturn) {
-        await window.mgpos.db.updateReturn(editingReturn.id, payload)
-      } else {
-        const price = selectedProduct?.sell_price || 0
-        await window.mgpos.db.addReturn({ ...payload, price, user_id: user?.id })
+  const filtered = useMemo(() => {
+    return invoices.filter(inv => {
+      const d = inv.date || inv.created_at?.slice(0, 10)
+      if (d && from && d < from) return false
+      if (d && to && d > to) return false
+      if (selectedSupplierId !== 'all' && String(inv.supplier_id) !== String(selectedSupplierId)) return false
+      if (statusFilter !== 'all') {
+        const remaining = Number(inv.remaining_amount || 0)
+        const paid = Number(inv.paid_amount || 0)
+        if (statusFilter === 'paid' && remaining > 0) return false
+        if (statusFilter === 'partial' && (paid <= 0 || remaining <= 0)) return false
+        if (statusFilter === 'unpaid' && paid > 0) return false
       }
-      resetForm()
-      loadData()
-      window.dispatchEvent(new Event('products-updated'))
-      window.dispatchEvent(new Event('stock-updated'))
-      window.dispatchEvent(new Event('dashboard:refresh'))
+      if (search) {
+        const q = search.toLowerCase().trim()
+        const sName = (inv.supplier_name || '').toLowerCase()
+        const idStr = String(inv.id || '')
+        const vInv = String(inv.vendor_invoice_no || '').toLowerCase()
+        const refNo = String(inv.reference_no || '').toLowerCase()
+        const invNo = String(inv.invoice_number || '').toLowerCase()
+        const sPhone = String(inv.supplier_phone || '').toLowerCase()
+        if (
+          !sName.includes(q) &&
+          !idStr.includes(q) &&
+          !vInv.includes(q) &&
+          !refNo.includes(q) &&
+          !invNo.includes(q) &&
+          !sPhone.includes(q)
+        ) return false
+      }
+      return true
+    })
+  }, [invoices, from, to, selectedSupplierId, statusFilter, search])
+
+  const filteredProductPurchases = useMemo(() => {
+    if (!search) return productPurchases
+    const q = search.toLowerCase()
+    return productPurchases.filter(p => (p.product_name || '').toLowerCase().includes(q))
+  }, [productPurchases, search])
+
+  const totals = useMemo(() => {
+    const totalAmount = filtered.reduce((s, i) => s + Number(i.total_amount || 0), 0)
+    const paidAmount = filtered.reduce((s, i) => s + Number(i.paid_amount || 0), 0)
+    const remainingAmount = filtered.reduce((s, i) => s + Number(i.remaining_amount || 0), 0)
+    return { totalAmount, paidAmount, remainingAmount, count: filtered.length }
+  }, [filtered])
+
+  const openInvoiceItems = async (inv) => {
+    setSelectedInvoice(inv)
+    setItemsLoading(true)
+    try {
+      const items = await window.mgpos.db.getPurchaseInvoiceItems(inv.id) || []
+      setInvoiceItems(items)
     } catch (e) {
-      console.error(e)
-      setReturnError(e?.message || 'حدث خطأ أثناء حفظ المرتجع')
+      console.error('Error fetching items:', e)
+      setInvoiceItems([])
+    } finally {
+      setItemsLoading(false)
     }
   }
 
-  async function handleDelete(id) {
-    try {
-      await window.mgpos.db.deleteReturn(id)
-      setDeleteReturnId(null)
-      loadData()
-      window.dispatchEvent(new Event('products-updated'))
-      window.dispatchEvent(new Event('stock-updated'))
-      window.dispatchEvent(new Event('dashboard:refresh'))
-    } catch (e) {
-      console.error(e)
-      setReturnError('حدث خطأ أثناء حذف المرتجع')
-      setDeleteReturnId(null)
+  const exportExcel = () => {
+    if (purchasesSubTab === 'invoices') {
+      if (!filtered.length) return
+      const exportRows = filtered.map((inv, idx) => {
+        const payMethodLabel = inv.payment_method === 'cash' ? 'نقدي'
+          : inv.payment_method === 'credit' ? 'آجل'
+          : inv.payment_method === 'card' ? 'شبكة / بطاقة'
+          : inv.payment_method === 'transfer' ? 'تحويل بنكي'
+          : inv.payment_method === 'check' ? 'شيك'
+          : (inv.payment_method || 'نقدي')
+
+        return {
+          'م': idx + 1,
+          'رقم الفاتورة': inv.invoice_number || `#${inv.id}`,
+          'رقم فاتورة المورد': inv.vendor_invoice_no || '—',
+          'رقم المرجع': inv.reference_no || '—',
+          'التاريخ': inv.date || inv.created_at?.slice(0, 10) || '—',
+          'تاريخ الاستحقاق': inv.due_date || '—',
+          'المورد': inv.supplier_name || '—',
+          'هاتف المورد': inv.supplier_phone || '—',
+          'الرقم الضريبي للمورد': inv.supplier_tax_no || '—',
+          'طريقة السداد': payMethodLabel,
+          'الإجمالي': Number(inv.total_amount || 0).toFixed(2),
+          'المدفوع': Number(inv.paid_amount || 0).toFixed(2),
+          'المتبقي': Number(inv.remaining_amount || 0).toFixed(2),
+          'حالة السداد': (inv.remaining_amount || 0) <= 0 ? 'مدفوعة بالكامل' : (inv.paid_amount || 0) > 0 ? 'مدفوعة جزئياً' : 'غير مدفوعة',
+        }
+      })
+      const ws = XLSX.utils.json_to_sheet(safeRows(exportRows))
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Purchases_Invoices')
+      XLSX.writeFile(wb, `Purchases_Invoices_${from}_to_${to}.xlsx`)
+    } else {
+      if (!filteredProductPurchases.length) return
+      const exportRows = filteredProductPurchases.map((p, idx) => ({
+        'م': idx + 1,
+        'اسم الصنف': p.product_name,
+        'الكمية المشتراة': p.total_qty,
+        'إجمالي التكلفة': Number(p.total_amount || 0).toFixed(2),
+        'متوسط سعر الشراء': isCostMasked ? '***' : Number(p.avg_buy_price || 0).toFixed(2),
+        'عدد فواتير التوريد': p.invoices_count,
+        'تاريخ آخر توريد': p.last_purchase_date || '—',
+      }))
+      const ws = XLSX.utils.json_to_sheet(safeRows(exportRows))
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Purchases_By_Product')
+      XLSX.writeFile(wb, `Purchases_By_Product_${from}_to_${to}.xlsx`)
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-slate-400 animate-pulse font-bold text-sm">
+        جاري تحميل تقارير المشتريات وفواتير الموردين...
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6">
-      {/* Summary Banner */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3 blur-3xl"/>
-        <div className="relative z-10 flex items-center justify-between">
-          <div>
-            <h3 className="text-orange-100 text-sm font-black mb-2 uppercase tracking-widest">إجمالي المرتجعات</h3>
-            <p className="text-5xl font-black tracking-tighter italic">{fmt(totalReturns)} <span className="text-lg font-bold opacity-40">{currency}</span></p>
-            <p className="text-orange-200 text-xs mt-2 font-bold">{filteredData.length} عملية مرتجع</p>
-          </div>
-          <div className="flex gap-4">
-            <button onClick={openCreateForm} className="bg-white text-orange-600 px-6 py-3 rounded-2xl font-black text-sm shadow-xl hover:scale-105 transition flex items-center gap-2">
-              <span className="text-lg leading-none">+</span> مرتجع من عميل
-            </button>
-            <button onClick={openSupplierReturn} className="bg-orange-600 border border-orange-400 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-xl hover:bg-orange-700 transition flex items-center gap-2">
-              <span className="text-lg leading-none">+</span> إرجاع إلى مورد
-            </button>
-          </div>
-        </div>
+    <div className="space-y-5 animate-fadeIn">
+      {/* Bento Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard icon={ShoppingBag} label="إجمالي المشتريات" value={`${fmt(totals.totalAmount)} ${currency}`} color="blue" sub="تكلفة التوريدات للفترة" />
+        <StatCard icon={CheckCircle} label="المسدد للموردين" value={`${fmt(totals.paidAmount)} ${currency}`} color="green" sub="دفعات نقدية وإلكترونية" />
+        <StatCard icon={Clock} label="المستحق للموردين" value={`${fmt(totals.remainingAmount)} ${currency}`} color="red" sub="مبالغ آجلة معلقة" />
+        <StatCard icon={FileText} label="عدد فواتير الشراء" value={totals.count} color="violet" sub="إجمالي الفواتير المسجلة" />
       </div>
 
-      {/* Add Return */}
-      {showAdd && (
-        <div role="dialog" aria-modal="true" className="bg-white rounded-[2rem] p-8 shadow-2xl border border-slate-100 animate-fadeIn">
-          <h4 className="font-black text-slate-800 text-lg mb-6 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
-              {editingReturn ? <Pencil size={16} /> : <RotateCcw size={16}/>}
-            </div>
-            {editingReturn ? 'تعديل بيانات المرتجع' : 'تسجيل مرتجع جديد'}
-          </h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">المنتج</label>
-              <select value={form.product_id} disabled={!!editingReturn} onChange={e=>{setForm(f=>({...f,product_id:e.target.value})); setReturnError('')}}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none disabled:opacity-50">
-                <option value=""> اختر منتج </option>
-                {products.map(p => {
-                  const avail = Number(p.store_quantity ?? p.quantity ?? 0)
-                  return (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({fmt(p.sell_price)} {currency}) - المتاح: {fmt(avail)}
-                    </option>
-                  )
-                })}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">الكمية</label>
-              <input
-                type="number"
-                min="0.001"
-                step="any"
-                value={form.quantity}
-                onChange={e => {setForm(f => ({ ...f, quantity: e.target.value })); setReturnError('')}}
-                placeholder="0"
-                className={`w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm font-bold outline-none ${
-                  exceedsAvailable ? 'border-red-300 text-red-700' : 'border-slate-100'
-                }`}
-              />
-              {selectedProduct && (
-                <p className={`text-xs font-black ${exceedsAvailable ? 'text-red-600' : 'text-slate-500'}`}>
-                  المتاح الآن: {fmt(availableNow)} {selectedProduct.unit || ''}
-                  {editingReturn ? `  |  الحد الأقصى بعد التعديل: ${fmt(maxAllowedQty)}` : ''}
-                </p>
-              )}
-            </div>
-            <div className="col-span-2 space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">سبب المرتجع</label>
-              <input value={form.reason} onChange={e=>{setForm(f=>({...f,reason:e.target.value})); setReturnError('')}} placeholder="اختياري"
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none"/>
-            </div>
-          </div>
-          {selectedProduct && form.quantity && (
-            <div className="mt-4 bg-orange-50 rounded-2xl p-4 border border-orange-100">
-              <p className="text-sm font-black text-orange-700">إجمالي المرتجع: <span className="text-xl">{fmt(parseFloat(form.quantity||0) * selectedProduct.sell_price)} {currency}</span></p>
-            </div>
-          )}
-          {returnError && (
-            <div className="flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-600 border border-red-100 mt-4">
-              <AlertTriangle size={15} />
-              {returnError}
-            </div>
-          )}
-          <div className="flex gap-3 mt-6">
-            <button
-              onClick={handleSave}
-              disabled={exceedsAvailable}
-              className="bg-emerald-800 hover:bg-emerald-900 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-3 rounded-2xl font-black text-sm transition shadow-lg"
-            >
-              حفظ
-            </button>
-            <button onClick={resetForm} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-8 py-3 rounded-2xl font-black text-sm transition">إلغاء</button>
-          </div>
+      {/* Sub-tabs bar */}
+      <div className="bg-white rounded-2xl p-2 border border-slate-200/80 shadow-2xs flex flex-wrap gap-2 items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPurchasesSubTab('invoices')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              purchasesSubTab === 'invoices' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <FileText size={14} />
+            <span>فواتير المشتريات ({filtered.length})</span>
+          </button>
+          <button
+            onClick={() => setPurchasesSubTab('by_product')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              purchasesSubTab === 'by_product' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Package size={14} />
+            <span>المشتريات حسب الأصناف ({filteredProductPurchases.length})</span>
+          </button>
         </div>
-      )}
 
-      {/* Return to Supplier */}
-      {showSupplierReturn && (
-        <div role="dialog" aria-modal="true" className="bg-white rounded-[2rem] p-8 shadow-2xl border border-slate-100 animate-fadeIn space-y-6">
-          <h4 className="font-black text-slate-800 text-lg mb-6 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
-              <RotateCcw size={16}/>
-            </div>
-            إرجاع بضاعة إلى مورد
-          </h4>
-          
-          <div className="grid grid-cols-2 gap-4">
-            {/* Supplier Select */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">المورد</label>
-              <select 
-                value={selectedSupplierId} 
-                onChange={e => handleSupplierChange(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none"
+        <button
+          onClick={exportExcel}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-emerald-700 hover:text-white text-slate-700 text-xs font-black transition border border-slate-200 cursor-pointer"
+        >
+          <FileSpreadsheet size={14} />
+          <span>تصدير إكسيل</span>
+        </button>
+      </div>
+
+      {/* Invoices View */}
+      {purchasesSubTab === 'invoices' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+              <div className="relative flex-1 min-w-[200px] flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                <Search size={16} className="text-slate-400 ml-2" />
+                <input
+                  type="text"
+                  aria-label="بحث في فواتير الشراء" placeholder="ابحث برقم الفاتورة، فاتورة المورد، المرجع، أو اسم المورد..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full bg-transparent text-sm font-bold outline-none text-slate-800 placeholder:text-slate-400"
+                />
+                {search && (
+                  <button aria-label="مسح البحث" onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              <select
+                value={selectedSupplierId}
+                aria-label="تصفية حسب المورد" onChange={e => setSelectedSupplierId(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
               >
-                <option value="">اختر مورد</option>
-                {suppliersList.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} (الرصيد: {fmt(s.balance)} {currency})</option>
+                <option value="all">كل الموردين ({suppliers.length})</option>
+                {suppliers.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-            </div>
 
-            {/* Invoice Select */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">فاتورة الشراء</label>
-              <select 
-                value={selectedInvoiceId} 
-                disabled={!selectedSupplierId}
-                onChange={e => handleInvoiceChange(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none disabled:opacity-50"
+              <select
+                value={statusFilter}
+                aria-label="تصفية حسب حالة السداد" onChange={e => setStatusFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
               >
-                <option value="">اختر الفاتورة</option>
-                {supplierInvoices.map(inv => (
-                  <option key={inv.id} value={inv.id}>
-                    فاتورة رقم {inv.invoice_number} ({inv.date}) - الإجمالي: {fmt(inv.total_amount)} {currency}
-                  </option>
-                ))}
+                <option value="all">كل الحالات</option>
+                <option value="paid">مدفوعة بالكامل</option>
+                <option value="partial">مدفوعة جزئياً</option>
+                <option value="unpaid">غير مدفوعة</option>
               </select>
             </div>
           </div>
 
-          {/* Invoice Items List */}
-          {invoiceItems.length > 0 && (
-            <div className="space-y-4">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">المنتجات في الفاتورة (حدد المنتجات المراد إرجاعها)</label>
-              <div className="border border-slate-100 rounded-2xl overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-slate-400 text-xs">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold text-xs">
+                  <tr>
+                    <th className="px-4 py-3.5 text-right">رقم الفاتورة</th>
+                    <th className="px-4 py-3.5 text-right">التاريخ</th>
+                    <th className="px-4 py-3.5 text-right">المورد</th>
+                    <th className="px-4 py-3.5 text-center">طريقة السداد</th>
+                    <th className="px-4 py-3.5 text-center">حالة السداد</th>
+                    <th className="px-4 py-3.5 text-left">إجمالي الفاتورة</th>
+                    <th className="px-4 py-3.5 text-left">المدفوع</th>
+                    <th className="px-4 py-3.5 text-left">المتبقي</th>
+                    <th className="px-4 py-3.5 text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.length === 0 ? (
                     <tr>
-                      <th className="px-4 py-3 text-center w-12"></th>
-                      <th className="px-4 py-3 text-right">المنتج</th>
-                      <th className="px-4 py-3 text-center">الكمية المشتراة</th>
-                      <th className="px-4 py-3 text-center">سعر التكلفة</th>
-                      <th className="px-4 py-3 text-center">المتاح حالياً</th>
-                      <th className="px-4 py-3 text-center w-32">الكمية المرجعة</th>
+                      <td colSpan={9} className="py-16 text-center text-slate-400 font-bold">
+                        لا توجد فواتير مشتريات مطابقة للفترة أو معايير البحث
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {invoiceItems.map(item => {
-                      const product = products.find(p => p.id === item.product_id)
-                      const currentStock = product ? Number(product.quantity ?? 0) : 0
-                      const isSelected = !!selectedItems[item.id]
-                      const returnQty = returnQuantities[item.id] || ''
-                      
+                  ) : (
+                    filtered.map(inv => {
+                      const rem = Number(inv.remaining_amount || 0)
+                      const paid = Number(inv.paid_amount || 0)
+                      const status = rem <= 0 ? { label: 'مدفوعة', cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' }
+                        : paid > 0 ? { label: 'جزئي', cls: 'bg-amber-50 text-amber-800 border-amber-200' }
+                        : { label: 'غير مدفوعة', cls: 'bg-rose-50 text-rose-700 border-rose-200' }
+                      const payMethodLabel = inv.payment_method === 'cash' ? 'نقدي'
+                        : inv.payment_method === 'credit' ? 'آجل'
+                        : inv.payment_method === 'card' ? 'شبكة / بطاقة'
+                        : inv.payment_method === 'transfer' ? 'تحويل بنكي'
+                        : inv.payment_method === 'check' ? 'شيك'
+                        : (inv.payment_method || 'نقدي')
                       return (
-                        <tr key={item.id} className={`hover:bg-slate-50/50 transition ${isSelected ? 'bg-orange-50/20' : ''}`}>
-                          <td className="px-4 py-3 text-center">
-                            <input 
-                              type="checkbox" 
-                              checked={isSelected}
-                              onChange={e => setSelectedItems(prev => ({ ...prev, [item.id]: e.target.checked }))}
-                              className="w-4 h-4 text-orange-600 border-slate-300 rounded focus:ring-orange-500"
-                            />
+                        <tr key={inv.id} className="hover:bg-slate-50/60 transition">
+                          <td className="px-4 py-3 font-mono text-slate-800">
+                            <div className="font-black text-sm">#{inv.id}</div>
+                            {inv.vendor_invoice_no && (
+                              <div className="text-[11px] font-sans font-normal text-slate-500">
+                                مورد: <span className="font-mono font-bold text-slate-700">{inv.vendor_invoice_no}</span>
+                              </div>
+                            )}
+                            {inv.reference_no && (
+                              <div className="text-[10px] font-sans font-normal text-slate-400">
+                                مرجع: <span className="font-mono">{inv.reference_no}</span>
+                              </div>
+                            )}
                           </td>
-                          <td className="px-4 py-3 text-right font-bold text-slate-800">{item.product_name}</td>
-                          <td className="px-4 py-3 text-center font-mono font-bold text-slate-600">{item.quantity}</td>
-                          <td className="px-4 py-3 text-center font-mono text-slate-500">{fmt(item.cost_price)} {currency}</td>
-                          <td className={`px-4 py-3 text-center font-mono font-bold ${currentStock <= 0 ? 'text-red-500' : 'text-slate-700'}`}>{currentStock}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                            <div>{inv.date || inv.created_at?.slice(0, 10) || '—'}</div>
+                            {inv.due_date && (
+                              <div className="text-[10px] text-slate-400 font-sans">استحقاق: <span className="font-mono">{inv.due_date}</span></div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-slate-800">{inv.supplier_name || 'مورد عام'}</div>
+                            {inv.supplier_phone && <div className="text-[11px] font-mono text-slate-400">{inv.supplier_phone}</div>}
+                          </td>
                           <td className="px-4 py-3 text-center">
-                            <input 
-                              type="number"
-                              min="0.001"
-                              step="any"
-                              disabled={!isSelected}
-                              value={returnQty}
-                              onChange={e => setReturnQuantities(prev => ({ ...prev, [item.id]: e.target.value }))}
-                              placeholder="0"
-                              className="w-24 bg-white border border-slate-200 rounded-xl px-2 py-1 text-center font-bold font-mono outline-none focus:border-orange-500 disabled:opacity-50 disabled:bg-slate-50"
-                            />
+                            <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                              {payMethodLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${status.cls}`}>
+                              {status.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-left font-mono font-black text-slate-900">
+                            {fmt(inv.total_amount)} <span className="text-[10px] text-slate-400">{currency}</span>
+                          </td>
+                          <td className="px-4 py-3 text-left font-mono font-bold text-emerald-700">
+                            {fmt(inv.paid_amount)}
+                          </td>
+                          <td className="px-4 py-3 text-left font-mono font-bold text-rose-600">
+                            {fmt(inv.remaining_amount)}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => openInvoiceItems(inv)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-600 hover:text-white text-xs font-bold transition border border-emerald-200 cursor-pointer"
+                            >
+                              <Eye size={13} />
+                              <span>معاينة</span>
+                            </button>
                           </td>
                         </tr>
                       )
-                    })}
-                  </tbody>
-                </table>
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purchases By Product View */}
+      {purchasesSubTab === 'by_product' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
+            <div className="relative flex-1 max-w-sm flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <Search size={15} className="text-slate-400 ml-2" />
+              <input
+                type="text"
+                aria-label="بحث في المشتريات حسب الأصناف" placeholder="ابحث باسم الصنف المورّد..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full bg-transparent text-xs font-bold outline-none text-slate-800 placeholder:text-slate-400"
+              />
+            </div>
+            <div className="text-xs font-bold text-slate-400">
+              إجمالي الأصناف المشتراة: <span className="text-emerald-700 font-mono font-black">{filteredProductPurchases.length}</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-bold">
+                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                  <tr>
+                    <th className="px-5 py-3.5 text-right font-black uppercase">اسم الصنف</th>
+                    <th className="px-4 py-3.5 text-center font-black uppercase">إجمالي الكمية المشتراة</th>
+                    <th className="px-4 py-3.5 text-center font-black uppercase">متوسط سعر الشراء</th>
+                    <th className="px-4 py-3.5 text-center font-black uppercase">إجمالي تكلفة الشراء</th>
+                    <th className="px-4 py-3.5 text-center font-black uppercase">عدد فواتير التوريد</th>
+                    <th className="px-5 py-3.5 text-center font-black uppercase">تاريخ آخر توريد</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredProductPurchases.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-16 text-center text-slate-400 font-black">
+                        لا توجد مشتريات مسجلة لأي أصناف في هذه الفترة
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProductPurchases.map((p, idx) => (
+                      <tr key={idx} className="hover:bg-emerald-50/40 transition">
+                        <td className="px-5 py-3.5 text-right text-slate-800 font-black text-sm">
+                          {p.product_name}
+                        </td>
+                        <td className="px-4 py-3.5 text-center font-mono font-black text-slate-900">
+                          <span className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-md">
+                            {p.total_qty}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-center font-mono text-slate-600">
+                          {isCostMasked ? '***' : fmt(p.avg_buy_price)} {currency}
+                        </td>
+                        <td className="px-4 py-3.5 text-center font-mono font-black text-emerald-800 text-sm">
+                          {fmt(p.total_amount)} {currency}
+                        </td>
+                        <td className="px-4 py-3.5 text-center font-mono text-slate-700">
+                          {p.invoices_count}
+                        </td>
+                        <td className="px-5 py-3.5 text-center font-mono text-slate-400">
+                          {p.last_purchase_date || '—'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Items Modal */}
+      {selectedInvoice && (() => {
+        const payMethodLabel = selectedInvoice.payment_method === 'cash' ? 'نقدي'
+          : selectedInvoice.payment_method === 'credit' ? 'آجل'
+          : selectedInvoice.payment_method === 'card' ? 'شبكة / بطاقة'
+          : selectedInvoice.payment_method === 'transfer' ? 'تحويل بنكي'
+          : selectedInvoice.payment_method === 'check' ? 'شيك'
+          : (selectedInvoice.payment_method || 'نقدي')
+        const rem = Number(selectedInvoice.remaining_amount || 0)
+        const paid = Number(selectedInvoice.paid_amount || 0)
+        const statusLabel = rem <= 0 ? 'مدفوعة بالكامل' : paid > 0 ? 'مدفوعة جزئياً' : 'غير مدفوعة (آجل)'
+        const unitMap = {
+          piece: 'قطعة',
+          kg: 'كيلو',
+          meter: 'متر',
+          liter: 'لتر',
+          box: 'علبة',
+          pack: 'باكت',
+          carton: 'كرتونة',
+          dozen: 'دستة',
+        }
+
+        return (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl border border-slate-100 overflow-hidden animate-fadeIn flex flex-col max-h-[90vh]">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
+                <div>
+                  <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                    <span>تفاصيل فاتورة الشراء #{selectedInvoice.id}</span>
+                    {selectedInvoice.vendor_invoice_no && (
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
+                        فاتورة المورد: {selectedInvoice.vendor_invoice_no}
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs font-bold text-slate-400 mt-0.5">
+                    المورد: {selectedInvoice.supplier_name || 'مورد عام'} • التاريخ: {selectedInvoice.date || selectedInvoice.created_at?.slice(0, 10)}
+                  </p>
+                </div>
+                <button
+                  aria-label="إغلاق تفاصيل الفاتورة" onClick={() => setSelectedInvoice(null)}
+                  className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer transition"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Metadata Cards */}
+              <div className="p-4 bg-slate-50/40 border-b border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                  <div className="text-[11px] text-slate-400 font-bold mb-0.5">المورد والضريبي</div>
+                  <div className="font-black text-slate-800 truncate">{selectedInvoice.supplier_name || 'مورد عام'}</div>
+                  {selectedInvoice.supplier_tax_no && (
+                    <div className="text-[10px] font-mono text-slate-500">ضريبي: {selectedInvoice.supplier_tax_no}</div>
+                  )}
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                  <div className="text-[11px] text-slate-400 font-bold mb-0.5">فاتورة المورد والمرجع</div>
+                  <div className="font-mono font-bold text-slate-800 truncate">
+                    {selectedInvoice.vendor_invoice_no ? `#${selectedInvoice.vendor_invoice_no}` : '—'}
+                  </div>
+                  {selectedInvoice.reference_no && (
+                    <div className="text-[10px] font-mono text-slate-500">مرجع: {selectedInvoice.reference_no}</div>
+                  )}
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                  <div className="text-[11px] text-slate-400 font-bold mb-0.5">طريقة وحالة السداد</div>
+                  <div className="font-bold text-slate-800">{payMethodLabel}</div>
+                  <div className="text-[10px] font-bold text-slate-500">{statusLabel}</div>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                  <div className="text-[11px] text-slate-400 font-bold mb-0.5">تاريخ الاستحقاق</div>
+                  <div className="font-mono font-bold text-slate-800">
+                    {selectedInvoice.due_date || '—'}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    تحرير: {selectedInvoice.date || selectedInvoice.created_at?.slice(0, 10)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="p-4 overflow-y-auto flex-1">
+                {itemsLoading ? (
+                  <div className="py-12 text-center text-slate-400 font-bold">جاري تحميل البنود...</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="px-3 py-2 text-right">#</th>
+                        <th className="px-3 py-2 text-right">الصنف والباركود</th>
+                        <th className="px-3 py-2 text-center">الوحدة والمعامل</th>
+                        <th className="px-3 py-2 text-center">الكمية</th>
+                        <th className="px-3 py-2 text-center">سعر الشراء</th>
+                        <th className="px-3 py-2 text-center">خصم السطر</th>
+                        <th className="px-3 py-2 text-center">التشغيلة والصلاحية</th>
+                        <th className="px-3 py-2 text-left">الإجمالي الصافي</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {invoiceItems.map((item, idx) => {
+                        const unitName = unitMap[item.unit] || item.unit || 'قطعة'
+                        const factor = Number(item.unit_factor || 1)
+                        const discountVal = Number(item.line_discount || 0)
+                        const discountDisplay = discountVal > 0
+                          ? (item.line_discount_type === 'percent' ? `${discountVal}%` : fmt(discountVal))
+                          : '—'
+                        const batchOrExp = [
+                          item.batch_number ? `تشغيلة: ${item.batch_number}` : '',
+                          item.expiry_date ? `صلاحية: ${item.expiry_date}` : '',
+                        ].filter(Boolean).join(' | ')
+
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/60 transition">
+                            <td className="px-3 py-2 font-mono text-slate-400">{idx + 1}</td>
+                            <td className="px-3 py-2">
+                              <div className="font-bold text-slate-800">{item.product_name}</div>
+                              {(item.barcode || item.product_barcode) && (
+                                <div className="text-[10px] font-mono text-slate-400">{item.barcode || item.product_barcode}</div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className="font-bold text-slate-700">{unitName}</span>
+                              {factor > 1 && (
+                                <span className="text-[10px] font-mono text-slate-400 mr-1">(×{factor})</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center font-mono font-bold text-slate-900">{item.quantity}</td>
+                            <td className="px-3 py-2 text-center font-mono text-slate-700">{isCostMasked ? '***' : fmt(item.cost_price)}</td>
+                            <td className="px-3 py-2 text-center font-mono text-slate-600">{discountDisplay}</td>
+                            <td className="px-3 py-2 text-center font-mono text-[10px] text-slate-500">
+                              {batchOrExp || '—'}
+                            </td>
+                            <td className="px-3 py-2 text-left font-mono font-black text-slate-900">
+                              {fmt(item.total || item.quantity * item.cost_price)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex flex-wrap justify-between items-center text-xs gap-3">
+                <div className="flex items-center gap-4 text-slate-600 font-bold">
+                  <div>
+                    المدفوع: <span className="font-mono text-emerald-700 font-black">{fmt(selectedInvoice.paid_amount)}</span> {currency}
+                  </div>
+                  <div>
+                    المتبقي: <span className="font-mono text-rose-600 font-black">{fmt(selectedInvoice.remaining_amount)}</span> {currency}
+                  </div>
+                  {selectedInvoice.notes && (
+                    <div className="text-slate-500 text-[11px] truncate max-w-xs">
+                      ملاحظات: {selectedInvoice.notes}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 font-bold">إجمالي الفاتورة:</span>
+                  <span className="text-lg font-black font-mono text-emerald-800">{fmt(selectedInvoice.total_amount)} {currency}</span>
+                </div>
               </div>
             </div>
-          )}
-
-          {/* Statement Update Option & Reason */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 flex items-center gap-2 py-2">
-              <input 
-                type="checkbox" 
-                id="updateStatement"
-                checked={updateSupplierStatement}
-                onChange={e => setUpdateSupplierStatement(e.target.checked)}
-                className="w-4 h-4 text-orange-600 border-slate-300 rounded focus:ring-orange-500"
-              />
-              <label htmlFor="updateStatement" className="text-xs font-bold text-slate-600 cursor-pointer select-none">
-                تحديث كشف حساب المورد (خصم القيمة وتوليد فاتورة مرتجع في حسابه تلقائياً)
-              </label>
-            </div>
-
-            <div className="col-span-2 space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">سبب الإرجاع</label>
-              <input 
-                value={supplierReturnReason} 
-                onChange={e => setSupplierReturnReason(e.target.value)} 
-                placeholder="أدخل سبب إرجاع البضاعة للمورد..."
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-orange-400 transition"
-              />
-            </div>
           </div>
-
-          {supplierReturnError && (
-            <div className="flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-600 border border-red-100">
-              <AlertTriangle size={15} />
-              {supplierReturnError}
-            </div>
-          )}
-
-          <div className="flex gap-3 shrink-0">
-            <button
-              onClick={handleSaveSupplierReturn}
-              disabled={isSubmittingSupplierReturn}
-              className="bg-orange-600 hover:bg-orange-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-3 rounded-2xl font-black text-sm transition shadow-lg flex items-center gap-2"
-            >
-              {isSubmittingSupplierReturn && <RefreshCw size={14} className="animate-spin" />}
-              تأكيد الإرجاع
-            </button>
-            <button 
-              onClick={() => setShowSupplierReturn(false)} 
-              className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-8 py-3 rounded-2xl font-black text-sm transition"
-            >
-              إلغاء
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Filters selector */}
-      <div className="bg-white rounded-[1.5rem] p-4 shadow-xl border border-slate-100 flex flex-wrap gap-4 items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center">
-            <Filter size={18} />
-          </div>
-          <div>
-            <h4 className="font-black text-slate-800 text-sm">نوع المرتجعات</h4>
-            <p className="text-[10px] text-slate-400 font-bold">تصفية القائمة حسب جهة المرتجع</p>
-          </div>
-        </div>
-        
-        <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100/80">
-          <button
-            onClick={() => setReturnsFilter('all')}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all ${
-              returnsFilter === 'all'
-                ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-            }`}
-          >
-            الكل ({data.length})
-          </button>
-          <button
-            onClick={() => setReturnsFilter('customer')}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all ${
-              returnsFilter === 'customer'
-                ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-            }`}
-          >
-            مرتجع عملاء ({data.filter(r => !r.type || r.type === 'customer').length})
-          </button>
-          <button
-            onClick={() => setReturnsFilter('supplier')}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all ${
-              returnsFilter === 'supplier'
-                ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-            }`}
-          >
-            مرتجع موردين ({data.filter(r => r.type === 'supplier').length})
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="overflow-auto max-h-[600px] custom-scrollbar">
-          {loading ? <div className="py-32 text-center"><RefreshCw className="animate-spin mx-auto" size={32}/></div> : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 sticky top-0 z-10 text-slate-400 border-b border-slate-100">
-              <tr>
-                <th className="px-5 py-4 text-right font-black text-[10px] uppercase whitespace-nowrap">المنتج</th>
-                <th className="px-5 py-4 text-center font-black text-[10px] uppercase whitespace-nowrap">النوع</th>
-                <th className="px-5 py-4 text-center font-black text-[10px] uppercase whitespace-nowrap">الكمية</th>
-                <th className="px-5 py-4 text-center font-black text-[10px] uppercase whitespace-nowrap">سعر الوحدة</th>
-                <th className="px-5 py-4 text-center font-black text-[10px] uppercase whitespace-nowrap">سبب المرتجع</th>
-                <th className="px-5 py-4 text-center font-black text-[10px] uppercase whitespace-nowrap">الكاشير</th>
-                <th className="px-5 py-4 text-center font-black text-[10px] uppercase whitespace-nowrap">التاريخ</th>
-                <th className="px-5 py-4 text-left font-black text-[10px] uppercase whitespace-nowrap">الإجمالي</th>
-                <th className="px-5 py-4 text-center font-black text-[10px] uppercase w-16 whitespace-nowrap">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filteredData.length === 0 ? (
-                <tr><td colSpan={9} className="py-20 text-center text-slate-300 font-bold">لا توجد مرتجعات في هذه الفترة</td></tr>
-              ) : filteredData.map(r => (
-                <tr key={r.id} className="hover:bg-orange-50/30 transition">
-                  <td className="px-5 py-4 font-black text-slate-800">
-                    <div className="whitespace-nowrap">{r.product_name}</div>
-                    {r.type === 'supplier' && (
-                      <div className="text-[10px] text-slate-400 font-bold mt-1 whitespace-nowrap">المورد: {r.supplier_name || 'غير معروف'}</div>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-center">
-                    {r.type === 'supplier' ? (
-                      <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-xl text-[10px] font-black whitespace-nowrap">مرتجع لمورد</span>
-                    ) : (
-                      <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-xl text-[10px] font-black whitespace-nowrap">مرتجع عميل</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-center font-black font-mono">{r.quantity}</td>
-                  <td className="px-5 py-4 text-center font-mono text-slate-600 whitespace-nowrap">{fmt(r.price)}</td>
-                  <td className="px-5 py-4 text-center">{r.reason ? <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-xl text-[10px] font-black whitespace-nowrap">{r.reason}</span> : ''}</td>
-                  <td className="px-5 py-4 text-center text-slate-500 font-bold text-xs whitespace-nowrap">{r.cashier_name || ''}</td>
-                  <td className="px-5 py-4 text-center text-slate-400 font-mono text-xs whitespace-nowrap">{fmtDate(r.created_at)}</td>
-                  <td className="px-5 py-4 text-left font-black text-orange-600 font-mono text-base whitespace-nowrap">{fmt(r.total)} <span className="text-xs opacity-30">{currency}</span></td>
-                  <td className="px-5 py-4 text-center">
-                    {canDo(user, 'settings.edit') && r.type !== 'supplier' && (
-                    <div className="flex items-center justify-center gap-2">
-                       <button onClick={()=>openEditForm(r)} className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition flex items-center justify-center">
-                          <Pencil size={15}/>
-                       </button>
-                       <button onClick={()=>setDeleteReturnId(r.id)} className="w-9 h-9 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition flex items-center justify-center">
-                          <X size={16}/>
-                       </button>
-                    </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          )}
-        </div>
-      </div>
-
-      {deleteReturnId && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-sm" dir="rtl">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-100">
-            <p className="font-black text-slate-800 mb-2">حذف المرتجع</p>
-            <p className="text-sm font-bold text-slate-500 mb-5">سيتم إعادة الكمية للمخزن. متأكد من الحذف؟</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleDelete(deleteReturnId)}
-                className="flex-1 bg-red-600 text-white py-2.5 rounded-xl font-black text-sm hover:bg-red-700 transition"
-              >
-                تأكيد الحذف
-              </button>
-              <button
-                onClick={() => setDeleteReturnId(null)}
-                className="flex-1 bg-slate-100 text-slate-600 py-2.5 rounded-xl font-black text-sm hover:bg-slate-200 transition"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
-function DashboardView({ from, to, currency, user }) {
+
+// ── PnL View Component (NEW) ────────────────────────────────────────────────
+function PnLView({ from, to, currency, settings, user }) {
+  const [summary, setSummary] = useState(null)
+  const [expenses, setExpenses] = useState([])
+  const [trend, setTrend] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const loadSeq = useRef(0)
+
+  const load = useCallback(async () => {
+    const seq = ++loadSeq.current
+    setLoading(true)
+    setLoadError('')
+    try {
+      const [s, exp, t] = await Promise.all([
+        window.mgpos.reports.getFilteredSummary(from, to),
+        window.mgpos.db.getExpenseSummary(from, to),
+        window.mgpos.reports.getSalesTrend(from, to),
+      ])
+      if (seq !== loadSeq.current) return
+      setSummary(s)
+      setExpenses(exp || [])
+      setTrend(t || [])
+    } catch (e) {
+      if (seq !== loadSeq.current) return
+      console.error('PnLView load error:', e)
+      setLoadError(cleanError(e, 'تعذر تحميل قائمة الأرباح والخسائر، حاول مرة تانية'))
+    } finally {
+      if (seq === loadSeq.current) setLoading(false)
+    }
+  }, [from, to])
+
+  useEffect(() => { load() }, [load])
+
+  const netSales = Number(summary?.total_sales || 0)
+  const totalDiscounts = Number(summary?.total_discount || 0)
+  const grossSales = Number(summary?.gross_sales || (netSales + totalDiscounts))
+  const customerReturns = Number(summary?.returns_total || 0)
+  const netRevenue = Math.max(0, netSales - customerReturns)
+  const cogs = Number(summary?.total_cogs || 0)
+  const grossProfit = netRevenue - cogs
+  const grossMargin = netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0
+  const totalExpenses = expenses.reduce((s, r) => s + Number(r.total || 0), 0)
+  const netOperatingProfit = grossProfit - totalExpenses
+  const netMargin = netRevenue > 0 ? (netOperatingProfit / netRevenue) * 100 : 0
+
+  const handlePrint = () => {
+    // the shop name, the period and the expense names are typed by people: escaped before printing
+    const storeName = escapeHtml(settings?.store_name || 'NEXA POS')
+    const periodFrom = escapeHtml(from)
+    const periodTo = escapeHtml(to)
+    const html = `<!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8"/>
+        <title>قائمة الأرباح والخسائر - ${storeName}</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; color: #1e293b; direction: rtl; }
+          .header { text-align: center; border-bottom: 2px solid #059669; padding-bottom: 12px; margin-bottom: 20px; }
+          .header h1 { margin: 0; color: #065f46; font-size: 24px; font-weight: 900; }
+          .meta { font-size: 13px; color: #64748b; margin-top: 6px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+          th, td { padding: 10px 14px; text-align: right; border-bottom: 1px solid #e2e8f0; }
+          .section-head { background: #f1f5f9; font-weight: 900; color: #0f172a; }
+          .highlight { font-weight: 900; font-size: 16px; background: #ecfdf5; color: #065f46; }
+          .negative { color: #dc2626; }
+          .positive { color: #059669; }
+          .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 13px; color: #64748b; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${storeName}</h1>
+          <div class="meta">قائمة الأرباح والخسائر للفترة من ${periodFrom} إلى ${periodTo}</div>
+        </div>
+        <table>
+          <tbody>
+            <tr class="section-head"><td colspan="2">١. الإيرادات التشغيلية</td></tr>
+            <tr><td>إجمالي مبيعات البضائع (قبل الخصم)</td><td dir="ltr">${fmt(grossSales)} ${currency}</td></tr>
+            <tr><td>(-) إجمالي الخصومات والمسموحات</td><td dir="ltr" class="negative">-${fmt(totalDiscounts)} ${currency}</td></tr>
+            <tr><td>(=) صافي مبيعات الفواتير</td><td dir="ltr">${fmt(netSales)} ${currency}</td></tr>
+            <tr><td>(-) مردودات مبيعات العملاء المستردة</td><td dir="ltr" class="negative">-${fmt(customerReturns)} ${currency}</td></tr>
+            <tr class="highlight"><td>(=) صافي الإيرادات التشغيلية المحققة</td><td dir="ltr">${fmt(netRevenue)} ${currency}</td></tr>
+            
+            <tr class="section-head"><td colspan="2">٢. تكلفة البضاعة المباعة (COGS)</td></tr>
+            <tr><td>تكلفة البضاعة المباعة بسعر التوريد الفعلي</td><td dir="ltr" class="negative">-${fmt(cogs)} ${currency}</td></tr>
+            <tr class="highlight"><td>(=) مجمل الربح التجاري (Gross Profit) [${grossMargin.toFixed(1)}%]</td><td dir="ltr">${fmt(grossProfit)} ${currency}</td></tr>
+
+            <tr class="section-head"><td colspan="2">٣. المصروفات التشغيلية</td></tr>
+            ${expenses.map(e => `<tr><td>${escapeHtml(e.category || 'مصروف عام')}</td><td dir="ltr" class="negative">-${fmt(e.total)} ${currency}</td></tr>`).join('')}
+            <tr><td><b>إجمالي المصروفات التشغيلية</b></td><td dir="ltr" class="negative">-${fmt(totalExpenses)} ${currency}</td></tr>
+
+            <tr class="highlight" style="font-size: 18px; border-top: 2px solid #059669;">
+              <td><b>(=) صافي الربح التشغيلي النهائي (Net Operating Profit) [${netMargin.toFixed(1)}%]</b></td>
+              <td dir="ltr" class="${netOperatingProfit >= 0 ? 'positive' : 'negative'}"><b>${fmt(netOperatingProfit)} ${currency}</b></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="footer">
+          <div>توقيع المحاسب المسئول: ..........................</div>
+          <div>اعتماد الإدارة: ..........................</div>
+        </div>
+      </body>
+    </html>`
+    window.mgpos.printA4(html, {})
+  }
+
+  // the statement needs the cost of goods: hidden for a user without the profit or the cost right
+  if (shouldMaskProfit(user) || shouldMaskCostPrice(user)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-2">
+        <Lock size={32} className="text-slate-300" />
+        <span className="text-sm font-black text-slate-600">قائمة الأرباح والخسائر محجوبة</span>
+        <span className="text-xs font-bold text-slate-400">لا تملك صلاحية عرض الأرباح المالية للنشاط</span>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-slate-400 animate-pulse font-bold text-sm">
+        جاري حساب قائمة الأرباح والخسائر الشاملة...
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5 animate-fadeIn">
+      {loadError && (
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">{loadError}</div>
+      )}
+      {/* 4 Financial Bento Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard icon={DollarSign} label="صافي الإيرادات" value={`${fmt(netRevenue)} ${currency}`} color="blue" sub="المبيعات بعد الخصومات والمرتجعات" />
+        <StatCard icon={TrendingUp} label="مجمل الربح التجاري" value={`${fmt(grossProfit)} ${currency}`} color="green" sub={`هامش مجمل: ${grossMargin.toFixed(1)}%`} />
+        <StatCard icon={ArrowDownCircle} label="المصروفات التشغيلية" value={`${fmt(totalExpenses)} ${currency}`} color="red" sub={`${expenses.length} بنود مسجلة`} />
+        <StatCard icon={Landmark} label="صافي الربح النهائي" value={`${fmt(netOperatingProfit)} ${currency}`} color={netOperatingProfit >= 0 ? 'green' : 'red'} sub={`هامش صافي: ${netMargin.toFixed(1)}%`} />
+      </div>
+
+      {/* Action Strip */}
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={handlePrint}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black transition shadow-sm cursor-pointer"
+        >
+          <Printer size={15} />
+          طباعة تقرير مالي رسمي A4
+        </button>
+      </div>
+
+      {/* Structured Income Statement Table */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-l from-emerald-50/50 to-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+              <Landmark size={20} />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-800 text-base">قائمة الدخل والأرباح والخسائر (P&L Statement)</h3>
+              <p className="text-xs text-slate-400 font-bold">تقرير تفصيلي مطابق للمعايير المحاسبية المعتمدة</p>
+            </div>
+          </div>
+          <span className="text-xs font-mono font-bold bg-slate-100 px-3 py-1 rounded-lg text-slate-600">
+            {from} ⬅️ {to}
+          </span>
+        </div>
+
+        <div className="p-6">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-slate-100">
+              {/* Section 1 */}
+              <tr className="bg-slate-50/70">
+                <td colSpan={2} className="px-4 py-2.5 font-black text-xs text-slate-700 uppercase">
+                  ١. الإيرادات التشغيلية (Operating Revenue)
+                </td>
+              </tr>
+              <tr>
+                <td className="px-4 py-3 font-bold text-slate-600">إجمالي مبيعات البضائع والمنتجات (قبل الخصم)</td>
+                <td className="px-4 py-3 text-left font-mono font-bold text-slate-800">{fmt(grossSales)} {currency}</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-3 font-bold text-rose-600">(-) إجمالي الخصومات والمسموحات التجارية</td>
+                <td className="px-4 py-3 text-left font-mono font-bold text-rose-600">-{fmt(totalDiscounts)} {currency}</td>
+              </tr>
+              <tr className="bg-slate-50/40">
+                <td className="px-4 py-2.5 font-bold text-slate-700">(=) صافي مبيعات الفواتير</td>
+                <td className="px-4 py-2.5 text-left font-mono font-bold text-slate-800">{fmt(netSales)} {currency}</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-3 font-bold text-rose-600">(-) مردودات مبيعات العملاء المستردة</td>
+                <td className="px-4 py-3 text-left font-mono font-bold text-rose-600">-{fmt(customerReturns)} {currency}</td>
+              </tr>
+              <tr className="bg-emerald-50/30">
+                <td className="px-4 py-3 font-black text-emerald-900">(=) صافي الإيرادات التشغيلية المحققة (Net Operating Revenue)</td>
+                <td className="px-4 py-3 text-left font-mono font-black text-emerald-900 text-base">{fmt(netRevenue)} {currency}</td>
+              </tr>
+
+              {/* Section 2 */}
+              <tr className="bg-slate-50/70">
+                <td colSpan={2} className="px-4 py-2.5 font-black text-xs text-slate-700 uppercase">
+                  ٢. تكلفة البضاعة المباعة (Cost of Goods Sold - COGS)
+                </td>
+              </tr>
+              <tr>
+                <td className="px-4 py-3 font-bold text-rose-600">تكلفة التوريد والشراء للكميات المباعة فعلياً</td>
+                <td className="px-4 py-3 text-left font-mono font-bold text-rose-600">-{fmt(cogs)} {currency}</td>
+              </tr>
+              <tr className="bg-emerald-50/40 border-t border-b border-emerald-200/80">
+                <td className="px-4 py-3 font-black text-emerald-950">
+                  (=) مجمل الربح التجاري (Gross Profit)
+                  <span className="mr-2 text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                    هامش: {grossMargin.toFixed(1)}%
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-left font-mono font-black text-emerald-950 text-base">{fmt(grossProfit)} {currency}</td>
+              </tr>
+
+              {/* Section 3: Operating Expenses */}
+              <tr className="bg-slate-50/70">
+                <td colSpan={2} className="px-4 py-2.5 font-black text-xs text-slate-700 uppercase">
+                  ٣. المصروفات التشغيلية المباشرة (Operating Expenses)
+                </td>
+              </tr>
+              {expenses.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className="px-4 py-2 text-xs text-slate-400">لا توجد مصروفات مسجلة في هذه الفترة</td>
+                </tr>
+              ) : (
+                expenses.map((e, idx) => (
+                  <tr key={idx}>
+                    <td className="px-4 py-2.5 text-xs font-bold text-slate-600">{e.category || 'مصروف عام'}</td>
+                    <td className="px-4 py-2.5 text-left font-mono font-bold text-rose-600 text-xs">-{fmt(e.total)} {currency}</td>
+                  </tr>
+                ))
+              )}
+              <tr className="bg-rose-50/20">
+                <td className="px-4 py-3 font-bold text-slate-700">إجمالي المصروفات التشغيلية</td>
+                <td className="px-4 py-3 text-left font-mono font-black text-rose-600">-{fmt(totalExpenses)} {currency}</td>
+              </tr>
+
+              {/* Final Result */}
+              <tr className={`border-t-2 ${netOperatingProfit >= 0 ? 'bg-emerald-100/50 border-emerald-600' : 'bg-rose-100/50 border-rose-600'}`}>
+                <td className="px-4 py-4 font-black text-base text-slate-900">
+                  (=) صافي الربح التشغيلي النهائي (Net Operating Profit)
+                  <span className={`mr-2 text-xs px-2.5 py-0.5 rounded-full font-bold ${netOperatingProfit >= 0 ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'}`}>
+                    صافي الهامش: {netMargin.toFixed(1)}%
+                  </span>
+                </td>
+                <td className={`px-4 py-4 text-left font-mono font-black text-xl ${netOperatingProfit >= 0 ? 'text-emerald-900' : 'text-rose-700'}`}>
+                  {fmt(netOperatingProfit)} {currency}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DashboardView({ from, to, currency, user, onNavigate }) {
+  const isCostMasked = shouldMaskCostPrice(user)
+  // profit and margin are computed from the cost, so they are hidden with it
+  const isProfitMasked = shouldMaskProfit(user) || isCostMasked
   const [summary, setSummary]   = useState(null); 
   const [trend, setTrend]       = useState([]); 
   const [cats, setCats]         = useState([]); 
@@ -2180,8 +3817,13 @@ function DashboardView({ from, to, currency, user }) {
   const [profit, setProfit]     = useState(0);
   const [loading, setLoading]   = useState(true);
   const [showInvoicesList, setShowInvoicesList] = useState(false);
+  const [loadError, setLoadError] = useState('')
+  const loadSeq = useRef(0)
 
   const load = useCallback(async () => {
+    // only the newest request for the period may write the dashboard
+    const seq = ++loadSeq.current
+    setLoadError('')
     try {
       const [s, t, c, tp, lowStockItems, expenseSummary] = await Promise.all([
         window.mgpos.reports.getFilteredSummary(from, to), 
@@ -2191,189 +3833,526 @@ function DashboardView({ from, to, currency, user }) {
         window.mgpos.db.getLowStock(),
         window.mgpos.db.getExpenseSummary(from, to),
       ])
+      if (seq !== loadSeq.current) return
       setSummary(s); 
-      setTrend(t); 
-      setCats(c); 
-      setTop(tp); 
+      setTrend(t || []); 
+      setCats(c || []); 
+      setTop(tp || []); 
       setLowStock(lowStockItems || []);
       const totalExp = (expenseSummary || []).reduce((sum, row) => sum + (Number(row.total) || 0), 0)
       setExpenses(totalExp)
-      const totalSales = s?.total_sales || 0
-      const totalDiscount = s?.total_discount || 0
-      const costOfGoods = 0
-      const netProfit = totalSales - totalDiscount - costOfGoods - totalExp
+      const netSales = Number(s?.total_sales || 0)
+      const customerRet = Number(s?.returns_total || 0)
+      const netRev = Math.max(0, netSales - customerRet)
+      const totalCogs = Number(s?.total_cogs || 0)
+      const grossProfit = netRev - totalCogs
+      const netProfit = grossProfit - totalExp
       setProfit(netProfit)
     } catch (err) {
+      if (seq !== loadSeq.current) return
       console.error('DashboardView load error:', err)
+      setLoadError(cleanError(err, 'تعذر تحميل لوحة المؤشرات، حاول مرة تانية'))
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
   }, [from, to])
 
   useEffect(() => { load() }, [load])
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400 animate-pulse font-black text-xs uppercase tracking-widest italic">جاري التجميع...</div>
+
+  const filledTrend = useMemo(() => {
+    return fillTrendDates(trend, from, to)
+  }, [trend, from, to])
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-3">
+      <RefreshCw className="animate-spin text-emerald-700" size={32} />
+      <span className="text-xs font-black">جاري تحديث لوحة المؤشرات والتحليلات...</span>
+    </div>
+  )
+
+  const aov = summary?.invoices_count > 0 ? (summary.total_sales / summary.invoices_count) : 0
+  const netRevenueCalculated = Math.max(0, Number(summary?.total_sales || 0) - Number(summary?.returns_total || 0))
+  const grossMargin = netRevenueCalculated > 0 ? (((netRevenueCalculated - Number(summary?.total_cogs || 0)) / netRevenueCalculated) * 100) : 0
+  const netMargin = netRevenueCalculated > 0 ? ((profit / netRevenueCalculated) * 100) : 0
+  const customersDebt = Number(summary?.customers_debt || 0)
+  const purchasesTotal = Number(summary?.purchases_total || 0)
+  const returnsTotal = Number(summary?.returns_total || 0)
+  const inventoryCost = Number(summary?.inventory_val_cost || 0)
+  const inventorySell = Number(summary?.inventory_val_sell || 0)
+  const collected = Number(summary?.collected || 0)
+  const cashAmt = Number(summary?.cash || 0)
+  const cardAmt = Number(summary?.card || 0)
+
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard icon={DollarSign} label="صافي المبيعات" value={`${fmt(summary?.total_sales)} ${currency}`} color="blue" />
-        <StatCard icon={FileText} onClick={() => setShowInvoicesList(true)} label="عدد الفواتير" value={summary?.invoices_count || 0} color="green" />
-        <StatCard icon={Tag} label="إجمالي الخصومات" value={`${fmt(summary?.total_discount)} ${currency}`} color="amber" />
-        <StatCard icon={Banknote} label="المحصّل فعلياً" value={`${fmt(summary?.collected)} ${currency}`} color="violet" />
-        <StatCard icon={Banknote} label="دفع نقدي" value={`${fmt(summary?.cash)} ${currency}`} color="green" />
-        <StatCard icon={CreditCard} label="بطاقة" value={`${fmt(summary?.card)} ${currency}`} color="blue" />
-        <StatCard icon={Clock} label="آجل (دين)" value={`${fmt(summary?.credit)} ${currency}`} color="red" />
-        <StatCard icon={TrendingUp} label="صافي الأرباح" value={`${fmt(profit)} ${currency}`} color={profit >= 0 ? 'green' : 'red'} />
-        <StatCard icon={ArrowDownCircle} label="إجمالي المصروفات" value={`${fmt(expenses)} ${currency}`} color="red" />
+    <div className="space-y-4 animate-fadeIn">
+      {loadError && (
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">{loadError}</div>
+      )}
+      {/* ── 4 Primary Executive Hero Bento Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {/* Card 1: Sales */}
+        <div
+          onClick={() => onNavigate?.('sales', 'invoices')}
+          className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer group flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shadow-xs">
+                <DollarSign size={18} />
+              </div>
+              <span className="text-xs font-black text-slate-700">صافي المبيعات</span>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              الفواتير <ArrowUpRight size={11} />
+            </span>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+                {fmt(netRevenueCalculated)}
+              </span>
+              <span className="text-xs font-bold text-slate-400">{currency}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold mt-2 pt-2 border-t border-slate-100">
+              <span>{summary?.invoices_count || 0} فاتورة</span>
+              <span>
+                {returnsTotal > 0 ? (
+                  <span className="text-rose-600 font-bold">مرتجعات: -{fmt(returnsTotal)}</span>
+                ) : (
+                  <>متوسط: <strong className="font-mono text-slate-700">{fmt(aov)}</strong></>
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Net Profit */}
+        <div
+          onClick={() => !isProfitMasked && onNavigate?.('pnl')}
+          className={`bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:shadow-md transition-all group flex flex-col justify-between ${
+            isProfitMasked ? 'cursor-default' : 'hover:border-emerald-300 cursor-pointer'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-900 flex items-center justify-center shadow-xs">
+                <TrendingUp size={18} />
+              </div>
+              <span className="text-xs font-black text-slate-700">صافي أرباح التشغيل</span>
+            </div>
+            {isProfitMasked ? (
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500">
+                محجوب
+              </span>
+            ) : (
+              <span className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-md ${netMargin >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                {netMargin >= 0 ? `+${netMargin.toFixed(1)}%` : `${netMargin.toFixed(1)}%`}
+              </span>
+            )}
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className={`text-xl sm:text-2xl font-black font-mono tracking-tight ${isProfitMasked ? 'text-slate-400 select-none' : profit >= 0 ? 'text-emerald-900' : 'text-rose-700'}`} dir="ltr">
+                {isProfitMasked ? '***' : fmt(profit)}
+              </span>
+              <span className="text-xs font-bold text-slate-400">{currency}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold mt-2 pt-2 border-t border-slate-100">
+              <span>مجمل الربح: <strong className="font-mono text-emerald-800">{isProfitMasked ? '***' : `${grossMargin.toFixed(1)}%`}</strong></span>
+              {!isProfitMasked && <span className="text-emerald-700 font-bold">قائمة الدخل P&L ⬅️</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Inflow & Cash */}
+        <div
+          onClick={() => onNavigate?.('payments')}
+          className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer group flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-800 flex items-center justify-center shadow-xs">
+                <Wallet size={18} />
+              </div>
+              <span className="text-xs font-black text-slate-700">المحصل الفعلي (السيولة)</span>
+            </div>
+            <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              طرق الدفع <ArrowUpRight size={11} />
+            </span>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+                {fmt(collected)}
+              </span>
+              <span className="text-xs font-bold text-slate-400">{currency}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold mt-2 pt-2 border-t border-slate-100">
+              <span>كاش: <strong className="font-mono text-slate-700">{fmt(cashAmt)}</strong></span>
+              <span>فيزا: <strong className="font-mono text-slate-700">{fmt(cardAmt)}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Inventory Assets */}
+        <div
+          onClick={() => onNavigate?.('inventory')}
+          className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer group flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shadow-xs">
+                <Package size={18} />
+              </div>
+              <span className="text-xs font-black text-slate-700">رأس مال المخزون (الشراء)</span>
+            </div>
+            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              الجرد <ArrowUpRight size={11} />
+            </span>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+                {isCostMasked ? '***' : fmt(inventoryCost)}
+              </span>
+              <span className="text-xs font-bold text-slate-400">{currency}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold mt-2 pt-2 border-t border-slate-100">
+              <span>بسعر البيع: <strong className="font-mono text-slate-700">{fmt(inventorySell)}</strong></span>
+              <span className="text-emerald-700 font-bold">حركة المخزون ⬅️</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Section */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        {/* Stock Alerts Card */}
-        <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-100 flex flex-col">
-          <h3 className="font-black text-red-600 text-lg mb-8 flex items-center gap-3">
-             <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shadow-lg shadow-red-100"><AlertTriangle size={20} /></div> تنبيهات نواقص المخزون
-          </h3>
-          <div className="flex-1 flex flex-col justify-center">
+      {/* ── 4 Secondary Operational Metric Pills ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div
+          onClick={() => onNavigate?.('purchases')}
+          className="bg-white rounded-xl px-3.5 py-2.5 border border-slate-200/80 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <ShoppingBag size={15} className="text-slate-500" />
+            <span className="text-xs font-bold text-slate-600">المشتريات:</span>
+          </div>
+          <span className="text-xs font-black font-mono text-slate-800" dir="ltr">{fmt(purchasesTotal)} {currency}</span>
+        </div>
+
+        <div
+          onClick={() => onNavigate?.('customers')}
+          className={`rounded-xl px-3.5 py-2.5 border flex items-center justify-between transition cursor-pointer ${
+            customersDebt > 0 ? 'bg-rose-50/70 border-rose-200 hover:bg-rose-100/60' : 'bg-white border-slate-200/80 hover:bg-slate-50'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Users size={15} className={customersDebt > 0 ? 'text-rose-600' : 'text-slate-500'} />
+            <span className={`text-xs font-bold ${customersDebt > 0 ? 'text-rose-900' : 'text-slate-600'}`}>ديون العملاء:</span>
+          </div>
+          <span className={`text-xs font-black font-mono ${customersDebt > 0 ? 'text-rose-700' : 'text-slate-800'}`} dir="ltr">
+            {fmt(customersDebt)} {currency}
+          </span>
+        </div>
+
+        <div
+          onClick={() => onNavigate?.('returns')}
+          className="bg-white rounded-xl px-3.5 py-2.5 border border-slate-200/80 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <RotateCcw size={15} className="text-amber-600" />
+            <span className="text-xs font-bold text-slate-600">المرتجعات:</span>
+          </div>
+          <span className="text-xs font-black font-mono text-amber-700" dir="ltr">{fmt(returnsTotal)} {currency}</span>
+        </div>
+
+        <div
+          onClick={() => onNavigate?.('expenses')}
+          className="bg-white rounded-xl px-3.5 py-2.5 border border-slate-200/80 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <ArrowDownRight size={15} className="text-rose-500" />
+            <span className="text-xs font-bold text-slate-600">المصروفات:</span>
+          </div>
+          <span className="text-xs font-black font-mono text-rose-700" dir="ltr">{fmt(expenses)} {currency}</span>
+        </div>
+      </div>
+
+      {/* ── Operational Attention Needed Strip (if any issues) ── */}
+      {(lowStock.length > 0 || customersDebt > 0) && (
+        <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+              <AlertTriangle size={16} />
+            </div>
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              {lowStock.length > 0 && (
+                <span className="font-bold text-amber-950 cursor-pointer hover:underline" onClick={() => onNavigate?.('inventory')}>
+                  ⚠️ <strong className="text-rose-700 font-black">{lowStock.length}</strong> أصناف قاربت على النفاد دون الحد الأدنى
+                </span>
+              )}
+              {customersDebt > 0 && (
+                <span className="font-bold text-amber-950 cursor-pointer hover:underline" onClick={() => onNavigate?.('customers')}>
+                  💳 ديون مستحقة للتحصيل: <strong className="text-rose-700 font-black">{fmt(customersDebt)} {currency}</strong>
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate?.(lowStock.length > 0 ? 'inventory' : 'customers')}
+            className="text-xs font-black text-amber-900 hover:text-white bg-amber-200/80 hover:bg-amber-800 px-3 py-1.5 rounded-lg transition cursor-pointer"
+          >
+            المعالجة الفورية ⬅️
+          </button>
+        </div>
+      )}
+
+      {/* ── Middle Section: Visual Analytics (2 Columns: Left 2/3, Right 1/3) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5">
+        {/* Left Column (2/3): Sales Performance & Profit Trajectory */}
+        <div className="lg:col-span-2 space-y-3.5">
+          {/* Card 1: Sales Performance Bar Chart */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shadow-xs">
+                  <TrendingUp size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800">أداء المبيعات اليومية</h3>
+                  <p className="text-[10px] text-slate-400 font-bold">تطور الإيراد اليومي عبر الفترة المحددة</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 rounded-lg">
+                إجمالي الفترة: {fmt(summary?.total_sales)} {currency}
+              </span>
+            </div>
+            <BarChart data={filledTrend} currency={currency} />
+          </div>
+
+          {/* Card 2: Profit Trajectory Line Chart */}
+          {!isProfitMasked && (
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shadow-xs">
+                    <BarChart3 size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800">مسار الأرباح اليومي</h3>
+                    <p className="text-[10px] text-slate-400 font-bold">حركة الأرباح الإجمالية لكل يوم</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 rounded-lg">
+                    أرباح الفترة: {fmt(profit)} {currency} ({netMargin.toFixed(1)}%)
+                  </span>
+                  <button
+                    onClick={() => onNavigate?.('pnl')}
+                    className="text-xs font-black text-emerald-700 hover:text-emerald-900 flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <span>تفاصيل P&L</span>
+                    <ArrowUpRight size={13} />
+                  </button>
+                </div>
+              </div>
+              <LineChart data={filledTrend} color="#059669" currency={currency} />
+            </div>
+          )}
+        </div>
+
+        {/* Right Column (1/3): Category Breakdown & Stock Health */}
+        <div className="space-y-3.5">
+          {/* Card 3: Categories Donut */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shadow-xs">
+                  <Tag size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800">توزيع المبيعات (فئات)</h3>
+                  <p className="text-[10px] text-slate-400 font-bold">الحصة السوقية لكل تصنيف</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                {cats.length} فئات
+              </span>
+            </div>
+            <DonutChart data={cats} currency={currency} />
+          </div>
+
+          {/* Card 4: Stock Health & Readiness */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shadow-xs ${
+                  lowStock.length > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-800'
+                }`}>
+                  {lowStock.length > 0 ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800">حالة وجاهزية المخزون</h3>
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    {lowStock.length > 0 ? 'أصناف قاربت على النفاد' : 'المخزون بوضع آمن'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate?.('inventory')}
+                className="text-xs font-black text-emerald-700 hover:text-emerald-900 flex items-center gap-1 transition cursor-pointer"
+              >
+                <span>الجرد</span>
+                <ArrowUpRight size={13} />
+              </button>
+            </div>
+
             {lowStock.length === 0 ? (
-              <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] p-10 text-center group transition-colors hover:border-green-200 hover:bg-green-50/30">
-                 <p className="text-slate-400 font-black text-sm group-hover:text-green-600 transition-colors flex flex-col items-center gap-3">
-                    <span className="text-3xl">📦</span>
-                    المخزون بوضع ممتاز
-                 </p>
+              <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100 flex flex-col justify-between gap-3 text-center">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto shadow-2xs">
+                  <CheckCircle2 size={22} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-emerald-950">المخزون بكامل الجاهزية</h4>
+                  <p className="text-[11px] text-emerald-700 font-bold mt-0.5">كافة الأصناف فوق حد الأمان المخزني</p>
+                </div>
+                <button
+                  onClick={() => onNavigate?.('inventory')}
+                  className="w-full py-2 bg-white hover:bg-emerald-700 hover:text-white text-emerald-800 border border-emerald-200 rounded-lg text-xs font-black transition cursor-pointer shadow-2xs"
+                >
+                  فحص رصيد وتقييم المخزون
+                </button>
               </div>
             ) : (
-              <div className="grid gap-3">
-                {lowStock.slice(0, 4).map((p, i) => (
-                  <div key={i} className="flex items-center justify-between bg-red-50/50 p-4 rounded-2xl border border-red-100 group hover:bg-red-50 transition-colors">
-                    <div className="flex items-center gap-3">
-                       <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/>
-                       <span className="font-black text-slate-800 text-sm truncate max-w-[150px]">{p.name}</span>
+              <div className="space-y-2">
+                <div className="bg-rose-50 p-2.5 rounded-lg border border-rose-100 flex items-center justify-between text-xs">
+                  <span className="font-black text-rose-800">{lowStock.length} أصناف دون الحد الأدنى</span>
+                  <button onClick={() => onNavigate?.('inventory')} className="text-[10px] font-black text-rose-700 hover:underline">
+                    عرض الكل ⬅️
+                  </button>
+                </div>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {lowStock.slice(0, 4).map((p, i) => (
+                    <div
+                      key={i}
+                      onClick={() => onNavigate?.('inventory')}
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-rose-50/60 border border-slate-100 transition cursor-pointer"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-black text-slate-800 block truncate">{p.name}</span>
+                        <span className="text-[10px] text-slate-400 font-bold">الحد الأدنى: {p.min_quantity || 5}</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-md bg-rose-600 text-white font-mono font-black text-xs flex-shrink-0">
+                        {p.quantity} {p.unit === 'piece' ? 'قطعة' : p.unit}
+                      </span>
                     </div>
-                    <span className="bg-red-600 text-white px-3 py-1 rounded-xl text-[10px] font-black shadow-lg shadow-red-600/20">{p.quantity} {p.unit === 'piece' ? 'قطعة' : p.unit}</span>
-                  </div>
-                ))}
-                {lowStock.length > 4 && (
-                   <button className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mt-2 hover:underline">
-                      + عرض {lowStock.length - 4} أصناف أخرى ي صفحة المخزون
-                   </button>
-                )}
+                  ))}
+                </div>
               </div>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Sales Performance Card */}
-        <div className="xl:col-span-2 bg-white rounded-[2rem] p-8 shadow-xl border border-slate-100 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full translate-x-1/2 -translate-y-1/2 blur-3xl opacity-50"/>
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="font-black text-slate-800 text-lg flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-800 text-white flex items-center justify-center shadow-lg shadow-emerald-800/20">
-                  <TrendingUp size={20} />
-                </div>
-                أداء المبيعات (آخر 7 أيام)
-              </h3>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-                 إجمالي المبيعات اليومية
-              </span>
+      {/* ── Bottom Section: Top 5 Best-Selling Products ── */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shadow-xs">
+              <Tag size={16} />
             </div>
-            <BarChart data={trend} />
+            <div>
+              <h3 className="text-sm font-black text-slate-800">أفضل 5 منتجات مبيعاً</h3>
+              <p className="text-[10px] text-slate-400 font-bold">حسب حجم الإيراد المحقق في الفترة المحددة</p>
+            </div>
           </div>
+          <button
+            onClick={() => onNavigate?.('products')}
+            className="text-xs font-black text-emerald-700 hover:text-emerald-900 flex items-center gap-1 transition cursor-pointer"
+          >
+            <span>تحليل كافة الأصناف 📊</span>
+            <ArrowUpRight size={13} />
+          </button>
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-100">
-          <p className="text-sm font-black text-slate-700 mb-8 flex items-center gap-3">
-             <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center"><BarChart3 size={16} /></div> مسار الأرباح اليومي
-          </p>
-          <LineChart data={trend} color="#15803d" />
-        </div>
-        <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-100">
-          <p className="text-sm font-black text-slate-700 mb-8 flex items-center gap-3">
-             <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-900 flex items-center justify-center"><Tag size={16} /></div> توزيع المبيعات (فئات)
-          </p>
-          <DonutChart data={cats} />
-        </div>
-      </div>
 
-      <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 relative overflow-hidden group">
-         {/* Decorative gradient top-right */}
-         <div className="absolute top-0 left-0 w-48 h-48 bg-amber-50 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl opacity-60 pointer-events-none" />
-         <div className="relative z-10">
-            <div className="flex items-center justify-between mb-8">
-               <h3 className="font-black text-slate-800 text-xl flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-300/50">
-                     <Tag size={20} />
+        {top.length === 0 ? (
+          <div className="py-12 text-center text-slate-300">
+            <Tag className="mx-auto mb-2 opacity-20" size={36} />
+            <p className="font-black text-xs">لا توجد مبيعات مسجلة في هذه الفترة</p>
+          </div>
+        ) : (() => {
+          const maxRevenue = Math.max(...top.slice(0, 5).map(p => Number(p.total_sales || 0)), 1)
+          const MEDAL_BADGES = [
+            'bg-amber-400 text-amber-950 font-black',
+            'bg-slate-300 text-slate-800 font-black',
+            'bg-amber-600 text-white font-black',
+            'bg-emerald-100 text-emerald-800 font-black',
+            'bg-slate-100 text-slate-700 font-black',
+          ]
+          const unitLabel = u => {
+            if (u === 'piece') return 'قطعة'
+            if (u === 'kg') return 'كجم'
+            if (u === 'meter') return 'متر'
+            if (u === 'box') return 'علبة'
+            return u || ''
+          }
+
+          return (
+            <div className="space-y-2.5">
+              {top.slice(0, 5).map((p, i) => {
+                const salesVal = Number(p.total_sales || 0)
+                const pct = (salesVal / maxRevenue) * 100
+                return (
+                  <div
+                    key={i}
+                    onClick={() => onNavigate?.('products')}
+                    className="flex items-center justify-between gap-4 p-3.5 rounded-xl hover:bg-slate-50/80 border border-slate-100 transition-all cursor-pointer group"
+                  >
+                    {/* Right: Medal + Product Name + Quantity Tag */}
+                    <div className="flex items-center gap-3 min-w-0 flex-1 pl-2">
+                      <div className={`w-7 h-7 rounded-lg ${MEDAL_BADGES[i]} flex items-center justify-center text-xs font-mono font-black shrink-0 shadow-2xs`}>
+                        {i + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-black text-slate-800 text-xs truncate group-hover:text-emerald-800 transition-colors">
+                            {p.name}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500 bg-slate-100/90 border border-slate-200/60 px-2 py-0.5 rounded-md shrink-0">
+                            {p.total_qty} {unitLabel(p.unit)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Middle: Controlled-width Progress Bar */}
+                    <div className="hidden sm:flex flex-col items-end w-36 md:w-48 px-2 shrink-0">
+                      <div className="flex items-center justify-between w-full text-[10px] font-bold text-slate-400 mb-1">
+                        <span>حصة الإيراد</span>
+                        <span className="font-mono font-black text-slate-600">{pct.toFixed(0)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-emerald-700 to-teal-500 transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Left: Revenue (Single Line, Never Wraps) */}
+                    <div className="text-left font-mono shrink-0 min-w-[100px]">
+                      <span className="font-black text-slate-900 text-sm whitespace-nowrap">
+                        {fmt(salesVal)}{' '}
+                        <span className="text-xs font-bold text-slate-400 mr-0.5">{currency}</span>
+                      </span>
+                    </div>
                   </div>
-                  أضل 5 منتجات مبيعاً
-               </h3>
-               <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
-                  حسب حجم الإيرادات
-               </span>
+                )
+              })}
             </div>
-
-            {top.length === 0 ? (
-               <div className="py-20 text-center text-slate-300">
-                  <Tag className="mx-auto mb-3 opacity-10" size={60} />
-                  <p className="font-black text-xs uppercase tracking-widest">لا توجد مبيعات في هذه الفترة</p>
-               </div>
-            ) : (() => {
-               const maxRevenue = Math.max(...top.slice(0,5).map(p => p.total_sales))
-               const RANK_COLORS = [
-                 'from-amber-400 to-yellow-500 text-white shadow-amber-400/40',
-                 'from-slate-400 to-slate-500 text-white shadow-slate-400/30',
-                 'from-orange-400 to-orange-500 text-white shadow-orange-400/30',
-                 'from-emerald-400 to-emerald-600 text-white shadow-emerald-400/30',
-                 'from-violet-400 to-violet-500 text-white shadow-violet-400/30',
-               ]
-               const unitLabel = (u) => {
-                 if (u === 'piece') return 'قطعة'
-                 if (u === 'kg') return 'وزن'
-                 if (u === 'meter') return 'متر'
-                 if (u === 'liter') return 'لتر'
-                 if (u === 'box') return 'علبة'
-                 if (u === 'pack') return 'باكت'
-                 return u || ''
-               }
-               return (
-                 <div className="space-y-4">
-                   {top.slice(0,5).map((p, i) => {
-                     const pct = maxRevenue ? (p.total_sales / maxRevenue * 100) : 0
-                     return (
-                       <div key={i} className="flex items-center gap-5 group/row p-4 rounded-2xl hover:bg-slate-50 transition-all duration-300">
-                         {/* Rank badge */}
-                         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${RANK_COLORS[i]} flex items-center justify-center font-black text-sm shadow-lg flex-shrink-0`}>
-                           {i+1}
-                         </div>
-                         {/* Product name + bar */}
-                         <div className="flex-1 min-w-0">
-                           <div className="flex items-center justify-between mb-1.5">
-                             <span className="font-black text-slate-800 truncate text-sm">{p.name}</span>
-                             <span className={`mr-3 px-3 py-0.5 rounded-xl text-[10px] font-black flex-shrink-0 ${
-                               p.unit === 'piece' ? 'bg-emerald-50 text-emerald-600' : 'bg-green-50 text-green-600'
-                             }`}>{unitLabel(p.unit)}</span>
-                           </div>
-                           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                             <div
-                               className={`h-full rounded-full bg-gradient-to-r from-emerald-800 to-emerald-500 transition-all duration-1000 shadow-sm`}
-                               style={{ width: `${pct}%` }}
-                             />
-                           </div>
-                         </div>
-                         {/* Stats */}
-                         <div className="text-left flex-shrink-0 min-w-[130px]">
-                           <p className="font-black text-emerald-900 font-mono text-lg leading-none">{fmt(p.total_sales)} <span className="text-[10px] opacity-30 font-normal">{currency}</span></p>
-                           <p className="text-[11px] text-slate-400 font-bold mt-1">{p.total_qty} {unitLabel(p.unit)}</p>
-                         </div>
-                       </div>
-                     )
-                   })}
-                 </div>
-               )
-            })()}
-         </div>
+          )
+        })()}
       </div>
-{showInvoicesList && (
+
+      {showInvoicesList && (
         <InvoicesListModal 
           from={from} 
           to={to} 
@@ -2387,835 +4366,49 @@ function DashboardView({ from, to, currency, user }) {
 }
 
 // ClosingsView imported from ./ClosingsView.jsx
-function CustomerStatementDrawer({ customer, currency, onClose, settings }) {
-  const [transactions, setTransactions] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [selectedInvoice, setSelectedInvoice] = useState(null)
-
-  const load = useCallback(async () => {
-    try {
-      const d = await window.mgpos.reports.getCustomerInvoices(customer.id)
-      setTransactions(d || [])
-    } catch (err) {
-      console.error('CustomerStatementDrawer load error:', err)
-      setTransactions([])
-    } finally {
-      setLoading(false)
-    }
-  }, [customer.id])
-
-  useEffect(() => { load() }, [load])
-
-  const totalPurchases = transactions.filter(t => t.entry_type === 'invoice').reduce((s, t) => s + t.total, 0)
-  const totalPayments  = transactions.filter(t => t.entry_type === 'payment').reduce((s, t) => s + t.total, 0)
-
-  function handlePrintStatement() {
-    const storeName  = String(settings?.store_name || '').trim() || 'MGIVIA'
-    const storePhone = settings?.store_phone || ''
-    const storeAddr  = settings?.store_address || ''
-    const creg       = settings?.commercial_register || ''
-    const taxNum     = settings?.tax_number || ''
-    const curr       = currency || 'ج.م'
-    const fmt2 = n => Number(n).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-    let currentBalance = 0
-
-    const rows = transactions.map((t, idx) => {
-      const isPurchase = t.entry_type === 'invoice' && t.total >= 0
-      const isReturn = t.entry_type === 'invoice' && t.total < 0
-      
-      const pLabel = isReturn 
-        ? `فاتورة مرتجع #${String(t.id).padStart(3, '0')}` 
-        : isPurchase 
-          ? `فاتورة مبيعات #${String(t.id).padStart(3, '0')}` 
-          : 'تسديد دفعة'
-
-      // transaction amount
-      const tAmt = isReturn ? -Math.abs(t.total) : Math.abs(t.total)
-
-      const dt = typeof t.created_at === 'string'
-        ? new Date(t.created_at.includes(' ') && !t.created_at.includes('Z') ? t.created_at.replace(' ', 'T') + 'Z' : t.created_at)
-        : new Date(t.created_at || Date.now())
-
-      const dStr = dt.toLocaleDateString('en-GB')
-      const tStr = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })
-
-      return `<tr>
-        <td>${idx + 1}</td>
-        <td dir="ltr" style="text-align:right">${dStr} ${tStr}</td>
-        <td>${pLabel}</td>
-        <td class="${isReturn ? 'amount-neg' : 'amount-pos'}">${isReturn || !isPurchase ? '' : ''}${fmt2(isPurchase ? t.total : 0)}</td>
-        <td class="amount-pay">${!isPurchase && !isReturn ? fmt2(Math.abs(t.total)) : isReturn ? fmt2(Math.abs(t.total)) : '0.00'}</td>
-      </tr>`
-    }).join('')
-
-    const phoneIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-left:4px;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`
-    const mapIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-left:4px;"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`
-
-    const badgesHtml = (creg || taxNum)
-      ? '<div style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap">'
-        + (creg ? '<span style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;color:#475569">س.ت: ' + creg + '</span>' : '')
-        + (taxNum ? '<span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;color:#1d4ed8">ضريبي: ' + taxNum + '</span>' : '')
-        + '</div>'
-      : ''
-
-    const html = `<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-  <meta charset="UTF-8">
-  <title>كشف حساب - ${customer.name}</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#fff; color:#1e293b; font-size:13px; }
-    .page { padding: 40px; max-width:900px; margin:0 auto; }
-    .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid #15803d; padding-bottom:20px; margin-bottom:30px; }
-    .header-right h1 { font-size:26px; font-weight:900; color:#15803d; margin-bottom:5px; }
-    .header-right .contact { font-size:12px; color:#64748b; font-weight:600; display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-top:8px;}
-    .header-left { text-align:left; }
-    .header-left h2 { font-size:18px; font-weight:800; color:#15803d; margin-bottom:5px; }
-    .header-left p { font-size:13px; color:#475569; font-weight:700; }
-    
-    .summary-cards { display:flex; gap:15px; margin-bottom:30px; }
-    .card { flex:1; padding:15px; border-radius:10px; border:2px solid; }
-    .card-title { font-size:11px; font-weight:800; text-transform:uppercase; margin-bottom:5px; }
-    .card-val { font-size:22px; font-weight:900; }
-    
-    table { width:100%; border-collapse:collapse; margin-top:10px; }
-    thead th { background:#f1f5f9; color:#475569; padding:12px; font-size:12px; font-weight:800; text-align:right; border-bottom:2px solid #cbd5e1; }
-    tbody tr { border-bottom:1px solid #e2e8f0; }
-    td { padding:12px; vertical-align:middle; font-size:13px; }
-    .amount-pos { font-weight:800; color:#15803d; }
-    .amount-neg { font-weight:800; color:#dc2626; }
-    .amount-pay { font-weight:800; color:#16a34a; }
-    .footer { margin-top:40px; text-align:center; font-size:11px; color:#94a3b8; }
-    @media print { body{print-color-adjust:exact;-webkit-print-color-adjust:exact;} }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <div class="header">
-      <div class="header-right">
-        <h1>${storeName}</h1>
-        <div class="contact">
-          ${storeAddr ? `<span>${mapIcon}${storeAddr}</span>` : ''}
-          ${storePhone ? `<span>${phoneIcon}${storePhone}</span>` : ''}
-        </div>
-        ${badgesHtml}
-      </div>
-      <div class="header-left">
-        <h2>كشف حساب عميل</h2>
-        <p>الاسم: ${customer.name}</p>
-        ${customer.phone ? `<p>رقم الهاتف: <span dir="ltr">${customer.phone}</span></p>` : ''}
-      </div>
-    </div>
-
-    <div class="summary-cards">
-      <div class="card" style="border-color:#e2e8f0; background:#f8fafc; color:#475569;">
-        <div class="card-title">إجمالي المشتريات</div>
-        <div class="card-val">${fmt2(totalPurchases)} ${curr}</div>
-      </div>
-      <div class="card" style="border-color:#dcfce7; background:#f0fdf4; color:#16a34a;">
-        <div class="card-title">إجمالي المدفوعات / المرتجعات</div>
-        <div class="card-val">${fmt2(totalPayments + Math.abs(transactions.filter(t => t.entry_type === 'invoice' && t.total < 0).reduce((s,t) => s+t.total,0)))} ${curr}</div>
-      </div>
-      <div class="card" style="border-color:#fee2e2; background:#fff5f5; color:#dc2626;">
-        <div class="card-title">الرصيد المستحق (المديونية)</div>
-        <div class="card-val">${fmt2(customer.balance)} ${curr}</div>
-      </div>
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>التاريخ والوقت</th>
-          <th>البيان (نوع الحركة)</th>
-          <th>مدين (عليه)</th>
-          <th>دائن (له)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows}
-      </tbody>
-    </table>
-
-    <div class="footer">
-    تاريخ الإصدار: ${new Date().toLocaleDateString('ar-EG')} - طُبع بواسطة ${storeName}
-    </div>
-  </div>
-</body>
-</html>`
-
-    window.mgpos.printA4(html, {})
-  }
-
-  return (
-    <div className="fixed inset-0 z-[60] flex print:block print:p-0" dir="rtl">
-      <div className="flex-1 bg-black/40 backdrop-blur-sm print:hidden" onClick={onClose} />
-      <div role="dialog" aria-modal="true" className="w-[540px] bg-white h-full flex flex-col shadow-2xl overflow-hidden animate-slideInLeft print:w-full print:shadow-none print:animate-none">
-        {/* Header */}
-        <div className="bg-gradient-to-br from-emerald-900 to-emerald-800 p-8 text-white relative flex-shrink-0 print:text-black print:bg-none print:bg-white print:border-b print:border-slate-300">
-          <div className="absolute top-0 left-0 w-48 h-48 bg-white/5 rounded-full -translate-x-1/3 -translate-y-1/3 blur-2xl print:hidden" />
-          <div className="relative z-10">
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center text-2xl font-black mb-3 border border-white/20">
-                  {customer.name?.[0]?.toUpperCase()}
-                </div>
-                <h2 className="text-2xl font-black">{customer.name}</h2>
-                {customer.phone && <p className="text-emerald-200 text-sm font-mono mt-1">الهاتف: {customer.phone}</p>}
-              </div>
-              <div className="flex gap-2 print:hidden">
-                <button onClick={handlePrintStatement} className="h-10 px-4 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition border border-white/20 gap-2 font-bold text-sm">
-                  <Printer size={16} /> طباعة
-                </button>
-                <button onClick={onClose} className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition border border-white/20">
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white/10 rounded-2xl p-4 border border-white/10">
-                <p className="text-emerald-200 text-[10px] font-black uppercase mb-1">إجمالي المشتريات</p>
-                <p className="text-xl font-black">{fmt(totalPurchases)}</p>
-              </div>
-              <div className="bg-white/10 rounded-2xl p-4 border border-white/10">
-                <p className="text-emerald-200 text-[10px] font-black uppercase mb-1">تم الدفع</p>
-                <p className="text-xl font-black text-green-300">{fmt(totalPayments)}</p>
-              </div>
-              <div className="bg-amber-400/20 rounded-2xl p-4 border border-amber-400/30">
-                <p className="text-amber-200 text-[10px] font-black uppercase mb-1">الرصيد المستحق</p>
-                <p className="text-xl font-black text-amber-300">{fmt(customer.balance)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Statement */}
-        <div className="flex-1 overflow-auto p-5 space-y-3 custom-scrollbar print:overflow-visible print:h-auto">
-          {customer.balance > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 flex gap-3 items-center print:border-red-400">
-              <div className="text-xl"><AlertTriangle size={24} className="text-red-500" /></div>
-              <div>
-                <p className="text-red-700 font-bold text-xs leading-tight">إشعار مديونية: يوجد رصيد مستحق لم يسدد</p>
-                <p className="font-black text-red-800 text-lg">{fmt(customer.balance)} <span className="text-[10px] opacity-60">{currency}</span></p>
-              </div>
-            </div>
-          )}
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 flex items-center gap-2">
-            <FileText size={12} className="text-emerald-600" /> كش الحساب ({transactions.length})
-          </p>
-          {loading ? (
-            <div className="py-20 text-center"><RefreshCw className="animate-spin mx-auto text-slate-300" size={32}/></div>
-          ) : transactions.length === 0 ? (
-            <div className="py-20 text-center text-slate-300 font-bold">لا توجد معاملات مسجلة</div>
-          ) : transactions.map((t, idx) => {
-            const isPurchase = t.entry_type === 'invoice' && t.total >= 0
-            const isReturn = t.entry_type === 'invoice' && t.total < 0
-            
-            let cardBg = isReturn ? 'bg-red-50/40 border-red-100' : isPurchase ? 'bg-slate-50 border-slate-100' : 'bg-green-50/40 border-green-100'
-            let labelStyle = isReturn ? 'bg-red-100 text-red-700' : isPurchase ? 'bg-emerald-100 text-emerald-700' : 'bg-green-100 text-green-700'
-            let labelText = isReturn ? <><RotateCcw size={12} className="inline mr-1" /> فاتورة مرتجع #{String(t.id).padStart(3, '0')}</> : isPurchase ? <><FileText size={12} className="inline mr-1" /> فاتورة رقم #{String(t.id).padStart(3, '0')}</> : <><Banknote size={12} className="inline mr-1" /> تسديد</>
-            let amountColor = isReturn ? 'text-red-600' : isPurchase ? 'text-slate-800' : 'text-green-600'
-            
-            return (
-              <div key={idx} className={`rounded-2xl p-4 border ${cardBg}`}>
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <span className={`px-3 py-1 rounded-xl text-[10px] font-black inline-flex items-center ${labelStyle}`}>
-                      {labelText}
-                    </span>
-                    {isPurchase && (
-                      <span className={`mr-2 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-widest inline-flex items-center uppercase ${
-                         (t.payment_method === 'cash' || t.payment_method === 'card' || (t.payment_method === 'split' && Number(t.credit_amount || 0) <= 0) || (t.total - (t.paid || 0)) <= 0)
-                          ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' 
-                          : 'bg-amber-100 text-amber-700 border border-amber-200'
-                      }`}>
-                         {(t.payment_method === 'cash' || t.payment_method === 'card' || (t.payment_method === 'split' && Number(t.credit_amount || 0) <= 0) || (t.total - (t.paid || 0)) <= 0) ? <><CheckCircle size={10} className="inline ml-1" /> مدفوعة</> : <><Clock size={10} className="inline ml-1" /> غير مدفوعة</>}
-                      </span>
-                    )}
-                    <p className="text-slate-600 text-xs font-bold mt-2.5 flex items-center gap-1.5 border border-slate-100 bg-slate-50/50 w-fit px-2.5 py-1 rounded-lg print:border-none print:px-0">
-                      <Calendar size={12} className="text-emerald-500" /> <span dir="ltr" className="text-[13px]">{fmtDate(t.created_at)}</span> <span className="opacity-40">|</span> <Clock size={12} className="text-emerald-500" /> <span dir="ltr" className="text-[13px]">{fmtTime(t.created_at)}</span>
-                    </p>
-                  </div>
-                  <div className="text-left">
-                    <p className={`font-black font-mono text-lg ${amountColor}`}>
-                      {isReturn ? '' : (!isPurchase ? '-' : '')}{fmt(t.total)} <span className="text-xs opacity-30">{currency}</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400 font-bold mt-2">
-                  {(isPurchase || isReturn) && (
-                    <button
-                      onClick={() => setSelectedInvoice({ id: t.id, total: t.total, discount: t.discount || 0, paid: t.paid, payment_method: t.payment_method, cash_amount: t.cash_amount || 0, card_amount: t.card_amount || 0, credit_amount: t.credit_amount || 0, payment_breakdown: t.payment_breakdown || null, notes: t.notes, created_at: t.created_at, customer_name: customer.name, customer_phone: customer.phone, cashier_name: t.cashier_name })}
-                      className="bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white px-3 py-1.5 rounded-xl text-[10px] font-black transition flex items-center gap-1.5"
-                    >
-                      <Eye size={12} />
-                      عرض الفاتورة
-                    </button>
-                  )}
-                  {t.notes && <span className="bg-white px-2 py-1 rounded-lg border border-slate-100 flex items-center gap-1"><FileText size={10} className="text-slate-400" /> {t.notes}</span>}
-                  {t.cashier_name && <span className="bg-white px-2 py-1 rounded-lg border border-slate-100 flex items-center gap-1"><User size={10} className="text-slate-400" /> {t.cashier_name}</span>}
-                  {(!isPurchase && !isReturn) && t.payment_method === 'manual_payment' && <span className="bg-white px-2 py-1 rounded-lg border border-slate-100">سداد يدوي</span>}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-      <style>{`.animate-slideInLeft { animation: slideInLeft 0.3s ease-out; } @keyframes slideInLeft { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
-
-      {selectedInvoice && (
-        <InvoiceDetailModal
-          invoice={selectedInvoice}
-          currency={currency}
-          settings={settings}
-          onClose={() => setSelectedInvoice(null)}
-        />
-      )}
-    </div>
-  )
-}
-function CustomerPaymentModal({ customer, currency, onSave, onClose }) {
-  const [amount, setAmount] = useState('')
-  const [notes, setNotes] = useState('')
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center" dir="rtl">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div role="dialog" aria-modal="true" className="relative bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 border border-slate-100 animate-fadeIn">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-green-100 text-green-700 flex items-center justify-center">
-              <Wallet size={18} />
-            </div>
-            تسديد دفعة
-          </h3>
-          <button onClick={onClose} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition border border-slate-200">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-amber-600 font-bold mb-1">العميل</p>
-            <p className="font-black text-slate-800 text-lg">{customer.name}</p>
-          </div>
-          <div className="text-left">
-            <p className="text-xs text-amber-600 font-bold mb-1">الرصيد المستحق</p>
-            <p className="font-black text-red-600 text-xl font-mono">{fmt(customer.balance)} <span className="text-xs opacity-40">{currency}</span></p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">المبلغ المسدد ({currency}) *</label>
-            <input
-              type="number" value={amount} onChange={e => setAmount(e.target.value)}
-              placeholder={`الحد الأقصى: ${fmt(customer.balance)}`}
-              className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3.5 text-sm font-bold outline-none focus:border-green-400 transition"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ملاحظات تسوية / تسديد</label>
-            <input
-              value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="اختياري..."
-              className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3.5 text-sm font-bold outline-none focus:border-green-400 transition"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-3 mt-8">
-          <button
-            onClick={() => { const a = parseFloat(amount); if (a > 0) onSave(a, notes) }}
-            disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > customer.balance}
-            className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white py-3.5 rounded-2xl font-black text-sm transition shadow-lg"
-          >
-            💳 تأكيد التسديد
-          </button>
-          <button onClick={onClose} className="px-8 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3.5 rounded-2xl font-black text-sm transition">
-            إلغاء
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-function CustomersView({ currency, user, settings }) {
-  const [data, setData] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [exportingAllStatements, setExportingAllStatements] = useState(false)
-  const [showAdd, setShowAdd] = useState(false)
-  const [editingCustomer, setEditingCustomer] = useState(null)
-  const [selectedStatement, setSelectedStatement] = useState(null)
-  const [selectedPayment, setSelectedPayment] = useState(null)
-  const [deleteCustomerId, setDeleteCustomerId] = useState(null)
-  const [pageToast, setPageToast] = useState({ text: '', type: '' })
-
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-
-  const loadData = useCallback(() => {
-    setLoading(true)
-    window.mgpos.reports.getCustomerDebts().then(d => { setData(d || []); setLoading(false) })
-  }, [])
-
-  useEffect(() => { loadData() }, [loadData])
-
-  async function handleSaveCustomer(payload) {
-    if (editingCustomer) {
-      await window.mgpos.db.updateCustomer(editingCustomer.id, payload)
-    } else {
-      await window.mgpos.db.addCustomer(payload)
-    }
-    setShowAdd(false)
-    setEditingCustomer(null)
-    loadData()
-  }
-
-  async function handleDeleteCustomer(id) {
-    try {
-      await window.mgpos.db.deleteCustomer(id)
-      setDeleteCustomerId(null)
-      loadData()
-    } catch (error) {
-      setDeleteCustomerId(null)
-      const message = error?.message || ''
-      if (error?.code === 'CUSTOMER_HAS_BALANCE' || message.includes('CUSTOMER_HAS_BALANCE')) {
-        setPageToast({ text: 'لا يمكن حذف العميل لأن لديه رصيد أو مديونية قائمة. سوّي الرصيد أولاً ثم حاول مرة أخرى.', type: 'error' })
-      } else {
-        setPageToast({ text: 'تعذر حذف العميل. لو العميل مرتبط بفواتير قديمة سيتم إخفاؤه من القائمة مع الحفاظ على تاريخه.', type: 'error' })
-      }
-      setTimeout(() => setPageToast({ text: '', type: '' }), 4000)
-    }
-  }
-
-  const filteredData = data.filter(c => {
-    // 1. Search
-    if (search) {
-      if (!c.name?.toLowerCase().includes(search.toLowerCase()) && !c.phone?.includes(search)) {
-        return false
-      }
-    }
-    // 2. Status
-    if (filterStatus === 'debt' && c.balance <= 0) return false
-    if (filterStatus === 'settled' && c.balance > 0) return false
-    
-    // 3. Date
-    if (startDate || endDate) {
-       const cDate = c.last_purchase ? c.last_purchase.slice(0, 10) : null
-       if (!cDate) return false // Hide if no transaction in date range
-       if (startDate && cDate < startDate) return false
-       if (endDate && cDate > endDate) return false
-    }
-    return true
-  })
-
-  const totalDebt = filteredData.reduce((s, c) => s + Math.max(0, c.balance), 0)
-  const withDebt = filteredData.filter(c => c.balance > 0).length
-
-  async function handlePayment(amount, notes) {
-    if (!selectedPayment) return
-    await window.mgpos.db.payDebt(selectedPayment.id, amount, notes, user?.id)
-    setSelectedPayment(null)
-    loadData()
-  }
-
-  async function handleExportAllStatements() {
-    if (filteredData.length === 0) {
-      setPageToast({ text: 'لا يوجد عملاء لتصدير كشف حساب لهم.', type: 'error' })
-      setTimeout(() => setPageToast({ text: '', type: '' }), 3000)
-      return
-    }
-
-    setExportingAllStatements(true)
-    try {
-      const storeName  = String(settings?.store_name || '').trim() || 'MGIVIA'
-      const storePhone = settings?.store_phone || ''
-      const storeAddr  = settings?.store_address || ''
-      const creg       = settings?.commercial_register || ''
-      const taxNum     = settings?.tax_number || ''
-      const curr       = currency || 'ج.م'
-      const fmt2 = n => Number(n || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-      const statementChunks = await Promise.all(
-        filteredData.map(async (customer) => {
-          const allTransactions = await window.mgpos.reports.getCustomerInvoices(customer.id).catch(() => [])
-          const tx = (allTransactions || []).filter((t) => {
-            const txDate = String(t?.created_at || '').slice(0, 10)
-            if (!txDate) return !(startDate || endDate)
-            if (startDate && txDate < startDate) return false
-            if (endDate && txDate > endDate) return false
-            return true
-          })
-
-          const totalPurchases = tx
-            .filter(t => t.entry_type === 'invoice' && Number(t.total) > 0)
-            .reduce((s, t) => s + Number(t.total || 0), 0)
-
-          const totalReturns = Math.abs(
-            tx
-              .filter(t => t.entry_type === 'invoice' && Number(t.total) < 0)
-              .reduce((s, t) => s + Number(t.total || 0), 0)
-          )
-
-          const totalPayments = tx
-            .filter(t => t.entry_type === 'payment')
-            .reduce((s, t) => s + Math.abs(Number(t.total || 0)), 0)
-
-          const rows = tx.map((t, idx) => {
-            const isPurchase = t.entry_type === 'invoice' && Number(t.total) >= 0
-            const isReturn = t.entry_type === 'invoice' && Number(t.total) < 0
-            const label = isReturn
-              ? `فاتورة مرتجع #${String(t.id).padStart(3, '0')}`
-              : isPurchase
-                ? `فاتورة مبيعات #${String(t.id).padStart(3, '0')}`
-                : 'تسديد دفعة'
-            const dt = typeof t.created_at === 'string'
-              ? new Date(t.created_at.includes(' ') && !t.created_at.includes('Z') ? t.created_at.replace(' ', 'T') + 'Z' : t.created_at)
-              : new Date(t.created_at || Date.now())
-            const dStr = dt.toLocaleDateString('en-GB')
-            const tStr = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })
-            const debit = isPurchase ? fmt2(t.total) : '0.00'
-            const credit = (!isPurchase || isReturn) ? fmt2(Math.abs(Number(t.total || 0))) : '0.00'
-            return `
-              <tr>
-                <td>${idx + 1}</td>
-                <td dir="ltr">${dStr} ${tStr}</td>
-                <td>${label}</td>
-                <td class="debit">${debit}</td>
-                <td class="credit">${credit}</td>
-              </tr>
-            `
-          }).join('')
-
-          return `
-            <section class="statement-page">
-              <div class="statement-head">
-                <div class="store">
-                  <h1>${storeName}</h1>
-                  ${(storeAddr || storePhone) ? `<p>${storeAddr ? `${storeAddr}` : ''}${(storeAddr && storePhone) ? ' - ' : ''}${storePhone ? `${storePhone}` : ''}</p>` : ''}
-                  ${(creg || taxNum) ? `<p>${creg ? `س.ت: ${creg}` : ''}${(creg && taxNum) ? ' - ' : ''}${taxNum ? `رقم ضريبي: ${taxNum}` : ''}</p>` : ''}
-                </div>
-                <div class="customer">
-                  <h2>كشف حساب عميل</h2>
-                  <p>الاسم: ${customer.name || '-'}</p>
-                  <p>الهاتف: ${customer.phone || '-'}</p>
-                </div>
-              </div>
-
-              <div class="cards">
-                <div class="card"><span>إجمالي المشتريات</span><strong>${fmt2(totalPurchases)} ${curr}</strong></div>
-                <div class="card"><span>إجمالي المدفوعات / المرتجعات</span><strong>${fmt2(totalPayments + totalReturns)} ${curr}</strong></div>
-                <div class="card debt"><span>الرصيد المستحق</span><strong>${fmt2(customer.balance)} ${curr}</strong></div>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>التاريخ والوقت</th>
-                    <th>البيان</th>
-                    <th>مدين (عليه)</th>
-                    <th>دائن (له)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rows || '<tr><td colspan="5" style="text-align:center;color:#64748b">لا توجد حركات</td></tr>'}
-                </tbody>
-              </table>
-
-              <div class="footer">تاريخ الإصدار: ${new Date().toLocaleDateString('ar-EG')} - طُبع بواسطة ${storeName}</div>
-            </section>
-          `
-        })
-      )
-
-      const html = `
-        <!DOCTYPE html>
-        <html lang="ar" dir="rtl">
-        <head>
-          <meta charset="UTF-8" />
-          <title>كشف حساب العملاء</title>
-          <style>
-            *{box-sizing:border-box}
-            body{margin:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:#0f172a;background:#fff}
-            .statement-page{padding:24px 28px; page-break-after:always}
-            .statement-page:last-child{page-break-after:auto}
-            .statement-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #15803d;padding-bottom:12px;margin-bottom:16px;gap:24px}
-            .store h1{margin:0 0 4px;font-size:24px;color:#15803d}
-            .store p,.customer p{margin:3px 0;font-size:12px;color:#475569;font-weight:700}
-            .customer h2{margin:0 0 6px;font-size:18px;color:#15803d}
-            .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
-            .card{border:1px solid #e2e8f0;background:#f8fafc;border-radius:10px;padding:10px}
-            .card span{display:block;font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px}
-            .card strong{font-size:18px;color:#0f172a}
-            .card.debt{background:#fff5f5;border-color:#fee2e2}
-            .card.debt strong{color:#dc2626}
-            table{width:100%;border-collapse:collapse}
-            th,td{padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right}
-            thead th{background:#f1f5f9;color:#334155;font-weight:900}
-            .debit{color:#15803d;font-weight:800}
-            .credit{color:#16a34a;font-weight:800}
-            .footer{margin-top:14px;text-align:center;font-size:11px;color:#94a3b8}
-            @media print{
-              body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-            }
-          </style>
-        </head>
-        <body>
-          ${statementChunks.join('')}
-        </body>
-        </html>
-      `
-
-      await window.mgpos.printA4(html, {})
-    } catch (err) {
-      console.error('Failed to export all customer statements:', err)
-      setPageToast({ text: 'حدث خطأ أثناء تجهيز كشف حساب العملاء. حاول مرة أخرى.', type: 'error' })
-      setTimeout(() => setPageToast({ text: '', type: '' }), 3000)
-    } finally {
-      setExportingAllStatements(false)
-    }
-  }
-
-  function handleExportCustomerContactsExcel() {
-    if (filteredData.length === 0) {
-      setPageToast({ text: 'لا يوجد عملاء لتصدير بياناتهم.', type: 'error' })
-      setTimeout(() => setPageToast({ text: '', type: '' }), 3000)
-      return
-    }
-
-    const rows = filteredData.map((customer) => ({
-      'اسم العميل': customer.name || '',
-      'رقم التليفون': customer.phone || '',
-    }))
-    const ws = XLSX.utils.json_to_sheet(rows)
-    ws['!cols'] = [{ wch: 32 }, { wch: 18 }]
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'بيانات العملاء')
-    const stamp = new Date().toISOString().slice(0, 10)
-    XLSX.writeFile(wb, `بيانات_العملاء_${stamp}.xlsx`)
-  }
-
-  if (loading) return <div className="py-48 text-center text-slate-300"><RefreshCw className="animate-spin mx-auto mb-4" size={40}/></div>
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard icon={Users} label="إجمالي العملاء" value={filteredData.length} color="blue" />
-        <StatCard icon={AlertTriangle} label="عملاء مدينين" value={withDebt} color="red" sub="لديهم مستحقات" />
-        <StatCard icon={DollarSign} label="إجمالي الديون" value={`${fmt(totalDebt)} ${currency}`} color="amber" />
-      </div>
-
-      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-50 flex flex-col gap-4 bg-slate-50/50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-800 text-white flex items-center justify-center"><Users size={18}/></div>
-              <h3 className="font-black text-slate-800 text-lg">كشف حسابات العملاء</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleExportCustomerContactsExcel}
-                disabled={filteredData.length === 0}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl font-black text-sm transition shadow-lg shrink-0"
-                title="تنزيل أسماء وأرقام العملاء كملف Excel"
-              >
-                <FileSpreadsheet size={15} />
-                تنزيل البيانات XLX
-              </button>
-              <button
-                onClick={handleExportAllStatements}
-                disabled={exportingAllStatements || filteredData.length === 0}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl font-black text-sm transition shadow-lg shrink-0"
-                title="تنزيل كشف حساب كل العملاء"
-              >
-                <Download size={15} />
-                {exportingAllStatements ? 'جاري التجهيز...' : 'تنزيل الكشف PDF'}
-              </button>
-              <button onClick={() => { setEditingCustomer(null); setShowAdd(true) }} className="flex items-center gap-2 bg-emerald-800 hover:bg-emerald-900 text-white px-5 py-2.5 rounded-xl font-black text-sm transition shadow-lg shrink-0">
-                + إضافة عميل
-              </button>
-            </div>
-          </div>
-          
-          <div className="flex gap-3 mt-2 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="بحث بالاسم أو الهاتف..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl pr-12 pl-4 py-2.5 text-sm font-bold outline-none focus:border-emerald-500 transition"
-              />
-            </div>
-            <select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:border-emerald-500 transition"
-            >
-              <option value="all">كل العملاء</option>
-              <option value="debt">🔴 مدينين (عليهم فلوس)</option>
-              <option value="settled">🟢 مسددين بالكامل</option>
-            </select>
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-emerald-500 transition">
-               <Calendar size={14} className="text-slate-400" />
-               <input
-                 type="date"
-                 value={startDate}
-                 onChange={e => setStartDate(e.target.value)}
-                 className="bg-transparent text-sm font-bold outline-none text-slate-600"
-               />
-               <span className="text-slate-300">-</span>
-               <input
-                 type="date"
-                 value={endDate}
-                 onChange={e => setEndDate(e.target.value)}
-                 className="bg-transparent text-sm font-bold outline-none text-slate-600"
-               />
-               {(startDate || endDate) && (
-                 <button onClick={() => { setStartDate(''); setEndDate('') }} className="text-red-400 hover:text-red-600 mr-2 p-1">
-                   <X size={14} />
-                 </button>
-               )}
-            </div>
-          </div>
-        </div>
-        <div className="overflow-auto max-h-[700px] custom-scrollbar">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 sticky top-0 z-10 text-slate-400 border-b border-slate-100">
-              <tr>
-                <th className="px-8 py-5 text-right font-black text-[10px] uppercase">العميل</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">الهاتف</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">إجمالي المشتريات</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">فواتير غير مسددة</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">الرصيد المستحق</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase">آخر عملية</th>
-                <th className="px-8 py-5 text-center font-black text-[10px] uppercase w-16">تفاصيل</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filteredData.length === 0 ? (
-                <tr><td colSpan={7} className="py-20 text-center text-slate-300 font-bold">لا توجد نتائج مطابقة للبحث أو الفلتر</td></tr>
-              ) : filteredData.map(c => (
-                <tr key={c.id} className={`hover:bg-emerald-50/20 transition ${c.balance > 0 ? 'border-r-4 border-r-red-400' : 'border-r-4 border-r-transparent'}`}>
-                  <td className="px-8 py-5">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm ${c.balance > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{c.name?.[0]?.toUpperCase()}</div>
-                      <span className="font-black text-slate-800">{c.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-5 text-center text-slate-500 font-mono text-xs">{c.phone || ''}</td>
-                  <td className="px-8 py-5 text-center font-bold text-slate-600 font-mono">{fmt(c.total_purchases)}</td>
-                  <td className="px-8 py-5 text-center"><span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-xl text-xs font-black">{c.unpaid_count || 0}</span></td>
-                  <td className="px-8 py-5 text-center font-black font-mono text-base">
-                    <span className={c.balance > 0 ? 'text-red-600' : 'text-green-600'}>{fmt(c.balance)} <span className="text-xs opacity-30">{currency}</span></span>
-                  </td>
-                  <td className="px-8 py-5 text-center text-slate-400 font-mono text-xs">{c.last_purchase ? fmtDate(c.last_purchase) : ''}</td>
-                  <td className="px-8 py-5 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <button onClick={() => setSelectedStatement(c)} title="كش الحساب" className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition flex items-center justify-center">
-                        <Eye size={15}/>
-                      </button>
-                      <button onClick={() => setSelectedPayment(c)} disabled={c.balance <= 0} title="تسديد دفعة" className={`w-9 h-9 rounded-xl transition flex items-center justify-center ${c.balance > 0 ? 'bg-green-50 text-green-600 hover:bg-green-600 hover:text-white border border-green-100 hover:border-green-600' : 'bg-slate-50 text-slate-300 cursor-not-allowed border border-slate-100'}`}>
-                        <Wallet size={15}/>
-                      </button>
-                      {canDo(user, 'settings.edit') && (
-                      <button onClick={() => { setEditingCustomer(c); setShowAdd(true) }} title="تعديل" className="w-9 h-9 rounded-xl bg-slate-50 text-slate-600 hover:bg-emerald-600 hover:text-white transition flex items-center justify-center">
-                        <Pencil size={14}/>
-                      </button>
-                      )}
-                      {canDo(user, 'settings.edit') && (
-                      <button onClick={() => setDeleteCustomerId(c.id)} title="حذف" className="w-9 h-9 rounded-xl bg-red-50 text-red-500 hover:bg-red-600 hover:text-white transition flex items-center justify-center">
-                        <X size={15}/>
-                      </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {selectedStatement && (
-        <CustomerStatementDrawer
-          customer={selectedStatement}
-          currency={currency}
-          settings={settings}
-          onClose={() => setSelectedStatement(null)}
-        />
-      )}
-
-      {selectedPayment && (
-        <CustomerPaymentModal
-          customer={selectedPayment}
-          currency={currency}
-          onSave={handlePayment}
-          onClose={() => setSelectedPayment(null)}
-        />
-      )}
-
-      {/* Customer Modal Add/Edit */}
-      {showAdd && (
-        <CustomerModal
-          customer={editingCustomer}
-          currency={currency}
-          onSave={handleSaveCustomer}
-          onClose={() => { setShowAdd(false); setEditingCustomer(null) }}
-        />
-      )}
-
-      {pageToast.text && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-2xl shadow-xl font-black text-sm text-white flex items-center gap-2 ${
-          pageToast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'
-        }`}>
-          <AlertTriangle size={15} />
-          {pageToast.text}
-        </div>
-      )}
-
-      {deleteCustomerId && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-sm" dir="rtl">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-100">
-            <p className="font-black text-slate-800 mb-2">حذف العميل</p>
-            <p className="text-sm font-bold text-slate-500 mb-5">هل أنت متأكد من حذف هذا العميل؟</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleDeleteCustomer(deleteCustomerId)}
-                className="flex-1 bg-red-600 text-white py-2.5 rounded-xl font-black text-sm hover:bg-red-700 transition"
-              >
-                تأكيد الحذف
-              </button>
-              <button
-                onClick={() => setDeleteCustomerId(null)}
-                className="flex-1 bg-slate-100 text-slate-600 py-2.5 rounded-xl font-black text-sm hover:bg-slate-200 transition"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+// CustomersView imported from ./CustomersView.jsx
 
 const MENU = [
-  { key: 'dashboard', label: 'لوحة التحكم',    icon: LayoutDashboard },
-  { key: 'sales',     label: 'تقارير المبيعات', icon: TrendingUp },
-  { key: 'customers', label: 'العملاء والديون', icon: Users },
-  { key: 'inventory', label: 'المخزون',         icon: Package },
-  { key: 'expenses',  label: 'المصروفات',      icon: ArrowDownRight },
-  { key: 'returns',   label: 'المرتجعات',      icon: RotateCcw },
-  { key: 'closings',  label: 'سجل الإقفالات',   icon: Clock },
+  { key: 'dashboard',  label: 'لوحة المؤشرات',            icon: LayoutDashboard, category: 'عام' },
+  { key: 'sales',      label: 'المبيعات والفواتير',       icon: TrendingUp,     category: 'مبيعات' },
+  { key: 'returns',    label: 'سجل المرتجعات',           icon: RotateCcw,      category: 'مبيعات' },
+  { key: 'tax_invoices', label: 'كشف الضرائب بالفواتير', icon: FileSpreadsheet, category: 'مالية' },
+  { key: 'products',   label: 'تحليلات الأصناف والأرباح', icon: Tag,            category: 'أصناف' },
+  { key: 'inventory',  label: 'جرد وحركة المخزون',       icon: Package,        category: 'مخزون' },
+  { key: 'warehouses', label: 'المخازن والفروع',          icon: Building2,      category: 'مخزون' },
+  { key: 'purchases',  label: 'المشتريات والموردين',      icon: ShoppingBag,    category: 'مشتريات' },
+  { key: 'pnl',        label: 'الأرباح والخسائر P&L',     icon: Landmark,       category: 'مالية' },
+  { key: 'expenses',   label: 'المصروفات',               icon: ArrowDownRight, category: 'مالية' },
+  { key: 'payments',   label: 'طرق الدفع والتحصيل',       icon: CreditCard,     category: 'مالية' },
+  { key: 'customers',  label: 'العملاء والديون',          icon: Users,          category: 'عملاء' },
+  { key: 'cashiers',   label: 'إنتاجية الكاشير',          icon: UserCheck,      category: 'موظفون' },
+  { key: 'closings',   label: 'سجل الإقفالات والورديات',  icon: Clock,          category: 'تشغيل' },
+  { key: 'store_sync', label: 'الأجهزة والعجز',           icon: MonitorSmartphone, category: 'تشغيل' },
+]
+
+const REPORT_SHORTCUTS = [
+  { id: 'dash-main', title: 'لوحة المؤشرات والـ BI التنفيذية', tab: 'dashboard', keywords: ['لوحة', 'مؤشرات', 'bi', 'ملخص', 'عام'] },
+  { id: 'sales-inv', title: 'فواتير المبيعات التفصيلية', tab: 'sales', subTab: 'invoices', keywords: ['فواتير', 'مبيعات', 'بيع', 'كاش', 'شبكة'] },
+  { id: 'sales-ret', title: 'مرتجع المبيعات والعملاء', tab: 'returns', keywords: ['مرتجع', 'استرجاع', 'مردودات'] },
+  { id: 'tax-inv-report', title: 'كشف الضرائب بالفواتير (المبيعات والمرتجلات)', tab: 'tax_invoices', keywords: ['ضرائب', 'ضريبة', 'قيمة مضافة', 'كشف ضرائب', 'نسب ضريبية', 'vat', 'إقرار'] },
+  { id: 'prod-best', title: 'الأصناف الأكثر مبيعاً والأعلى ربحاً', tab: 'products', keywords: ['أعلى مبيعا', 'أكثر مبيعا', 'أرباح', 'اصناف'] },
+  { id: 'prod-dead', title: 'الأصناف الراكدة وبطيئة الحركة', tab: 'products', keywords: ['راكد', 'بضاعة راكدة', 'مخزون ميت', 'بطيئة'] },
+  { id: 'prod-margin', title: 'تحليل هوامش الربح للأصناف', tab: 'products', keywords: ['هامش ربح', 'تكلفة', 'مارجن'] },
+  { id: 'inv-status', title: 'جرد وتقييم المخزون الحالي', tab: 'inventory', keywords: ['جرد', 'مخزن', 'تقييم', 'بضاعة'] },
+  { id: 'inv-low', title: 'نواقص المخزون دون الحد الأدنى', tab: 'inventory', keywords: ['نواقص', 'حد ادنى', 'عجز', 'ناقص'] },
+  { id: 'inv-mov', title: 'سجل حركة المخزون (Movements Log)', tab: 'inventory', keywords: ['حركة', 'تحويل', 'صرف', 'توريد', 'حركات'] },
+  { id: 'inv-cmp', title: 'مقارنة رصيد المخزون بين تاريخين', tab: 'inventory', keywords: ['مقارنة', 'جرد سابق', 'فروق'] },
+  { id: 'pur-inv', title: 'فواتير المشتريات والتوريدات', tab: 'purchases', keywords: ['مشتريات', 'موردين', 'توريد', 'فواتير شراء'] },
+  { id: 'pur-prod', title: 'المشتريات حسب الأصناف الموردة', tab: 'purchases', keywords: ['شراء اصناف', 'كميات مشتراة'] },
+  { id: 'pnl-full', title: 'قائمة الدخل والأرباح والخسائر P&L', tab: 'pnl', keywords: ['ارباح', 'خسائر', 'pnl', 'قائمة دخل', 'صافي ربح'] },
+  { id: 'cust-debts', title: 'ديون وكشوف حسابات العملاء', tab: 'customers', keywords: ['ديون', 'عملاء', 'اجل', 'كشف حساب', 'مستحقات'] },
+  { id: 'cash-perf', title: 'إنتاجية ومبيعات الكاشير والموظفين', tab: 'cashiers', keywords: ['كاشير', 'موظف', 'بائع', 'انتاجية', 'مستخدمين'] },
+  { id: 'pay-dist', title: 'توزيع طرق الدفع (كاش / فيزا / آجل)', tab: 'payments', keywords: ['طرق دفع', 'كاش', 'فيزا', 'بنك', 'محفظة'] },
+  { id: 'exp-list', title: 'دفتر المصروفات والبنود التشغيلية', tab: 'expenses', keywords: ['مصروفات', 'صرف', 'ايجار', 'رواتب'] },
+  { id: 'wh-status', title: 'أرصدة وتقييم المخازن والفروع', tab: 'warehouses', keywords: ['مخازن', 'فروع', 'مستودعات', 'تقييم مخزن'] },
+  { id: 'close-log', title: 'سجل الإقفالات والورديات اليومية', tab: 'closings', keywords: ['اقفال', 'وردية', 'شفت', 'يومية', 'تقفيل'] },
+  { id: 'store-shortage', title: 'عجز المخزون بين الأجهزة (بيع بدون رصيد)', tab: 'store_sync', keywords: ['عجز', 'بيع بالسالب', 'تعارض', 'أجهزة', 'مزامنة'] },
+  { id: 'store-devices', title: 'أجهزة المحل وربطها والمزامنة', tab: 'store_sync', keywords: ['أجهزة', 'كاشير', 'ربط', 'مزامنة', 'شبكة'] },
 ]
 
 export default function ReportsPage({ settings, user, setPage }) {
@@ -3231,30 +4424,129 @@ export default function ReportsPage({ settings, user, setPage }) {
     )
   }
 
+  const isProfitMasked = shouldMaskProfit(user)
+  const isCostMasked = shouldMaskCostPrice(user)
+
   const tabPermissions = {
     dashboard: canDo(user, 'reports.view'),
     sales: canDo(user, 'reports.view'),
-    customers: canViewPage(user, 'reports'),
+    products: canDo(user, 'reports.view') || canViewPage(user, 'products'),
     inventory: canViewPage(user, 'warehouse') || canViewPage(user, 'products') || canDo(user, 'reports.view'),
-    expenses: canDo(user, 'reports.view'),
+    purchases: canDo(user, 'reports.view') || canViewPage(user, 'purchases'),
+    pnl: canDo(user, 'reports.view') && !isProfitMasked && !isCostMasked,
+    customers: canViewPage(user, 'reports'),
+    cashiers: canDo(user, 'reports.view'),
+    payments: canDo(user, 'reports.view'),
     returns: canDo(user, 'reports.view'),
+    tax_invoices: canDo(user, 'reports.view'),
+    expenses: canDo(user, 'reports.view'),
+    warehouses: canViewPage(user, 'warehouse') || canDo(user, 'reports.view'),
     closings: canViewPage(user, 'day-closing') || canViewPage(user, 'shifts') || canDo(user, 'reports.view'),
+    // devices of the store, pairing code and shortages: owner / admin only
+    store_sync: canDo(user, 'users.manage') && canDo(user, 'reports.view'),
   }
-  const hiddenTabs = MENU.filter((item) => !tabPermissions[item.key]).map((item) => item.key)
-  const firstAllowedTab = MENU.find((item) => tabPermissions[item.key])?.key || 'customers'
 
-  const [active, setActive]   = useState(() => {
+  const hiddenTabs = MENU.filter((item) => !tabPermissions[item.key]).map((item) => item.key)
+  const firstAllowedTab = MENU.find((item) => tabPermissions[item.key])?.key || 'dashboard'
+
+  const [active, setActive] = useState(() => {
     const t = localStorage.getItem('openReportTab');
     if (t) { localStorage.removeItem('openReportTab'); if (!hiddenTabs.includes(t)) return t; }
     return firstAllowedTab;
   })
-  const [dateFrom, setFrom]   = useState(daysAgo(7))
-  const [dateTo,   setTo]     = useState(today())
+
+  const [pinnedTabs, setPinnedTabs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nexa_pinned_reports')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return ['dashboard', 'sales', 'products', 'inventory', 'pnl']
+  })
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [dateFrom, setFrom] = useState(daysAgo(7))
+  const [dateTo,   setTo]   = useState(today())
   const [applied,  setApplied] = useState({ from: daysAgo(7), to: today() })
+  const [activePreset, setActivePreset] = useState('7days')
+  const [salesSubTab, setSalesSubTab] = useState('invoices')
+  const [salesMethod, setSalesMethod] = useState('all')
+  const searchInputRef = useRef(null)
   const currency = settings?.currency || 'ج.م'
 
-  const applyFilter = useCallback(() => { setApplied({ from: dateFrom, to: dateTo }) }, [dateFrom, dateTo])
-  const needsDates = ['dashboard', 'sales', 'inventory', 'expenses', 'returns', 'closings'].includes(active)
+  const togglePin = (tabKey, e) => {
+    e?.stopPropagation()
+    setPinnedTabs(prev => {
+      const updated = prev.includes(tabKey) ? prev.filter(k => k !== tabKey) : [...prev, tabKey]
+      localStorage.setItem('nexa_pinned_reports', JSON.stringify(updated))
+      return updated
+    })
+  }
+
+  const handleNavigate = (tab, subTab, options = {}) => {
+    if (tab === 'sales') {
+      if (subTab) setSalesSubTab(subTab)
+      if (options.method) setSalesMethod(options.method)
+    }
+    setActive(tab)
+  }
+
+  const applyPreset = (presetKey) => {
+    setActivePreset(presetKey)
+    const t = today()
+    let f = t
+    let toDate = t
+    if (presetKey === 'today') {
+      f = t
+      toDate = t
+    } else if (presetKey === 'yesterday') {
+      f = daysAgo(1)
+      toDate = daysAgo(1)
+    } else if (presetKey === '7days') {
+      f = daysAgo(7)
+      toDate = t
+    } else if (presetKey === 'this_week') {
+      const d = new Date()
+      const diffFromSat = (d.getDay() + 1) % 7 // Saturday start in Egypt & Arab world
+      const start = new Date(d)
+      start.setDate(d.getDate() - diffFromSat)
+      f = formatLocalDate(start)
+      toDate = t
+    } else if (presetKey === 'this_month') {
+      const d = new Date()
+      f = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+      toDate = t
+    } else if (presetKey === 'last_month') {
+      const d = new Date()
+      const prevMonthLastDay = new Date(d.getFullYear(), d.getMonth(), 0)
+      const prevMonthFirstDay = new Date(prevMonthLastDay.getFullYear(), prevMonthLastDay.getMonth(), 1)
+      f = formatLocalDate(prevMonthFirstDay)
+      toDate = formatLocalDate(prevMonthLastDay)
+    } else if (presetKey === 'this_year') {
+      const d = new Date()
+      f = `${d.getFullYear()}-01-01`
+      toDate = t
+    }
+    setFrom(f)
+    setTo(toDate)
+    setApplied({ from: f, to: toDate })
+  }
+
+  const applyFilter = useCallback(() => { 
+    setActivePreset('custom')
+    setApplied({ from: dateFrom, to: dateTo }) 
+  }, [dateFrom, dateTo])
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const q = searchQuery.toLowerCase().trim()
+    return REPORT_SHORTCUTS.filter(s => {
+      if (s.title.toLowerCase().includes(q)) return true
+      return s.keywords.some(k => k.includes(q))
+    })
+  }, [searchQuery])
+
+  const needsDates = ['dashboard', 'sales', 'products', 'inventory', 'purchases', 'pnl', 'cashiers', 'payments', 'expenses', 'returns', 'tax_invoices', 'closings'].includes(active)
 
   useEffect(() => {
     if (hiddenTabs.includes(active)) {
@@ -3264,67 +4556,199 @@ export default function ReportsPage({ settings, user, setPage }) {
 
   const renderView = () => {
     switch (active) {
-      case 'dashboard': return <DashboardView from={applied.from} to={applied.to} currency={currency} user={user} />
-      case 'sales':     return <SalesView     dateFrom={applied.from} dateTo={applied.to} onSetDates={(f, t) => { setFrom(f); setTo(t); setApplied({from:f, to:t}) }} currency={currency} settings={settings} />
-
-      case 'customers': return <CustomersView currency={currency} user={user} settings={settings} />
-      case 'inventory': return <InventoryView from={applied.from} to={applied.to} currency={currency} />
-      case 'expenses':  return <ExpensesView  from={applied.from} to={applied.to} currency={currency} user={user} />
-      case 'returns':   return <ReturnsView   from={applied.from} to={applied.to} currency={currency} user={user} />
-      case 'closings':  return <ClosingsView  from={applied.from} to={applied.to} currency={currency} user={user} settings={settings} />
-      default:          return null
+      case 'dashboard':  return <DashboardView from={applied.from} to={applied.to} currency={currency} user={user} onNavigate={handleNavigate} />
+      case 'sales':      return <SalesView     dateFrom={applied.from} dateTo={applied.to} onSetDates={(f, t) => { setFrom(f); setTo(t); setApplied({from:f, to:t}) }} currency={currency} settings={settings} user={user} initialSubTab={salesSubTab} initialMethod={salesMethod} />
+      case 'products':   return <ProductsAnalyticsView from={applied.from} to={applied.to} currency={currency} user={user} />
+      case 'inventory':  return <InventoryView from={applied.from} to={applied.to} currency={currency} user={user} />
+      case 'purchases':  return <PurchasesView from={applied.from} to={applied.to} currency={currency} settings={settings} user={user} />
+      case 'pnl':        return <PnLView       from={applied.from} to={applied.to} currency={currency} settings={settings} user={user} />
+      case 'customers':  return <CustomersView currency={currency} user={user} settings={settings} />
+      case 'cashiers':   return <CashiersView  from={applied.from} to={applied.to} currency={currency} settings={settings} user={user} />
+      case 'payments':   return <PaymentsView  from={applied.from} to={applied.to} currency={currency} />
+      case 'returns':    return <ReturnsView   from={applied.from} to={applied.to} currency={currency} user={user} />
+      case 'tax_invoices': return <TaxInvoicesView from={applied.from} to={applied.to} currency={currency} user={user} settings={settings} />
+      case 'expenses':   return <ExpensesView  from={applied.from} to={applied.to} currency={currency} user={user} />
+      case 'warehouses': return <WarehousesView currency={currency} user={user} />
+      case 'closings':   return <ClosingsView  from={applied.from} to={applied.to} currency={currency} user={user} settings={settings} />
+      case 'store_sync': return <StoreSyncView from={applied.from} to={applied.to} user={user} />
+      default:           return null
     }
   }
 
   return (
-    <div className="flex h-full bg-slate-100/30" dir="rtl">
-      <div className="w-64 flex flex-col p-5 flex-shrink-0">
-        <aside className="bg-emerald-900 text-white rounded-[2rem] shadow-2xl flex flex-col overflow-hidden h-fit border border-emerald-800">
-           <div className="px-6 py-8 border-b border-emerald-800/50 bg-emerald-950/20">
-              <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-2xl bg-emerald-800 flex items-center justify-center shadow-lg"><BarChart3 size={20} /></div>
-                 <h2 className="text-xl font-black tracking-tight">التقارير</h2>
+    <div className="flex flex-col h-full bg-slate-100" dir="rtl">
+      {/* ── Page Header ── */}
+      <div className="bg-white border-b border-slate-200/80 px-6 py-3 flex flex-wrap items-center justify-between gap-3 flex-shrink-0 shadow-2xs z-20">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-800 flex items-center justify-center text-white shadow-xs">
+            <BarChart3 size={20} />
+          </div>
+          <div>
+            <h1 className="text-base font-black text-slate-900 leading-tight flex items-center gap-2">
+              <span>مركز التقارير والتحليلات الذكية</span>
+              <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">ERP BI</span>
+            </h1>
+            <p className="text-[11px] text-slate-400 font-bold">متابعة شاملة للمبيعات، المخزون، المشتريات، والأرباح بالبيانات الحية</p>
+          </div>
+        </div>
+
+        {/* Search Quick Jump Input */}
+        <div className="relative flex-1 max-w-xs min-w-[200px]">
+          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-emerald-700 focus-within:bg-white transition-all">
+            <Search size={14} className="text-slate-400 ml-2" />
+            <input
+              aria-label="بحث في التقارير" ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={e => {
+                setSearchQuery(e.target.value)
+                setIsSearchOpen(true)
+              }}
+              onFocus={() => setIsSearchOpen(true)}
+              placeholder="بحث سريع عن أي تقرير..."
+              className="w-full bg-transparent text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-none"
+            />
+            {searchQuery && (
+              <button aria-label="مسح البحث السريع" onClick={() => { setSearchQuery(''); setIsSearchOpen(false) }} className="text-slate-400 hover:text-slate-600">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* Quick Jump Search Dropdown */}
+          {isSearchOpen && searchResults.length > 0 && (
+            <div className="absolute top-full right-0 left-0 mt-1 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-fadeIn">
+              <div className="px-3 py-1 text-[10px] font-black text-slate-400 uppercase border-b border-slate-100 mb-1">
+                نتائج البحث السريع ({searchResults.length})
               </div>
-           </div>
-           <nav className="p-4 space-y-2">
-             {MENU.filter(item => !hiddenTabs.includes(item.key)).map(item => (
-               <button key={item.key} onClick={() => setActive(item.key)} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[13px] font-black transition-all duration-300 transform ${active === item.key ? 'bg-white text-emerald-900 shadow-xl scale-[1.05]' : 'text-emerald-100/60 hover:bg-emerald-800 hover:text-white'}`}>
-                 <item.icon size={18} className={active === item.key ? 'text-emerald-900' : 'text-emerald-400'} />
-                 <span className="flex-1 text-right">{item.label}</span>
-               </button>
-             ))}
-           </nav>
-           <div className="p-4 pt-0">
-              <button onClick={() => setPage('day-closing')} className="w-full bg-amber-500 text-emerald-950 py-3.5 rounded-2xl text-sm font-black shadow-xl shadow-amber-500/30 flex items-center justify-center gap-2 hover:bg-amber-400 hover:scale-[1.03] active:scale-95 transition-all duration-200"> <Lock size={16} /> فتح وإقفال اليوم </button>
-           </div>
-        </aside>
+              {searchResults.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    handleNavigate(item.tab, item.subTab)
+                    setIsSearchOpen(false)
+                    setSearchQuery('')
+                  }}
+                  className="w-full px-3 py-2 text-right hover:bg-emerald-50/70 transition flex items-center justify-between text-xs font-bold text-slate-700 cursor-pointer"
+                >
+                  <span>{item.title}</span>
+                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">فتح ⬅️</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Date Filter Strip */}
+        <div className="flex flex-wrap items-center gap-2">
+          {needsDates && (
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Quick Preset Pills */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                {[
+                  { key: 'today', label: 'اليوم' },
+                  { key: 'yesterday', label: 'أمس' },
+                  { key: '7days', label: '٧ أيام' },
+                  { key: 'this_month', label: 'هذا الشهر' },
+                  { key: 'last_month', label: 'الشهر الماضي' },
+                  { key: 'this_year', label: 'هذا العام' },
+                ].map(p => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => applyPreset(p.key)}
+                    className={`px-2.5 py-1 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                      activePreset === p.key
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Exact Date Range Inputs */}
+              <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  aria-label="من تاريخ" onChange={(e) => { setFrom(e.target.value); setActivePreset('custom') }}
+                  className="bg-transparent px-2 py-1 text-xs font-mono font-bold text-slate-800 outline-none w-28"
+                />
+                <span className="text-slate-400 font-bold text-xs">إلى</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  aria-label="إلى تاريخ" onChange={(e) => { setTo(e.target.value); setActivePreset('custom') }}
+                  className="bg-transparent px-2 py-1 text-xs font-mono font-bold text-slate-800 outline-none w-28"
+                />
+                <button
+                  type="button"
+                  aria-label="تحديث البيانات" onClick={applyFilter}
+                  title="تحديث البيانات"
+                  className="w-7 h-7 flex items-center justify-center bg-emerald-800 text-white rounded-lg shadow-xs hover:bg-emerald-900 transition-all cursor-pointer"
+                >
+                  <RefreshCw size={13} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {setPage && (
+            <button
+              type="button"
+              onClick={() => setPage('day-closing')}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-emerald-950 px-3 py-2 rounded-xl text-xs font-black shadow-xs transition cursor-pointer"
+            >
+              <Lock size={14} />
+              <span>إقفال اليومية</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="bg-white border-b border-slate-100 px-10 py-5 flex items-center gap-8 shadow-sm z-10">
-           <h1 className="text-2xl font-black text-slate-800 leading-none"> {MENU.find(m => m.key === active)?.label} </h1>
-           {needsDates && (
-             <div className="mr-auto flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-200 shadow-inner">
-                <input type="date" value={dateFrom} onChange={e => setFrom(e.target.value)} className="bg-transparent px-4 py-2 text-xs font-black text-slate-700 outline-none w-32" />
-                <div className="h-6 w-px bg-slate-200" />
-                <input type="date" value={dateTo} onChange={e => setTo(e.target.value)} className="bg-transparent px-4 py-2 text-xs font-black text-slate-700 outline-none w-32" />
-                <button onClick={applyFilter} className="w-10 h-10 flex items-center justify-center bg-emerald-800 text-white rounded-xl shadow-lg hover:bg-emerald-900 transition-all"> <RefreshCw size={16} /> </button>
-             </div>
-           )}
+      {/* ── Main Navigation Tabs Bar (All Visible - Zero Scroll) ── */}
+      <div className="bg-white border-b border-slate-200/80 px-4 sm:px-6 py-2.5 flex-shrink-0 shadow-2xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {MENU.filter((item) => !hiddenTabs.includes(item.key)).map((item) => {
+            const Icon = item.icon
+            const isCurrent = active === item.key
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setActive(item.key)}
+                className={`group flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer select-none ${
+                  isCurrent
+                    ? 'bg-emerald-800 text-white shadow-xs font-black ring-1 ring-emerald-900/30'
+                    : 'bg-slate-50/90 hover:bg-slate-100 text-slate-700 hover:text-slate-950 border border-slate-200/80 hover:border-slate-300'
+                }`}
+                title={item.label}
+              >
+                <Icon size={14} className={isCurrent ? 'text-emerald-300' : 'text-slate-400 group-hover:text-slate-600'} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
         </div>
-        <div className="flex-1 overflow-auto p-10 custom-scrollbar animate-fadeIn">
-           <div className="max-w-[1600px] mx-auto"> {renderView()} </div>
+      </div>
+
+      {/* ── Full Width Report Content Canvas ── */}
+      <div className="flex-1 overflow-auto p-6 lg:p-8 custom-scrollbar animate-fadeIn">
+        <div className="max-w-[1700px] mx-auto w-full">
+          {renderView()}
         </div>
       </div>
 
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 20px; }
-        .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-spin-slow { animation: spin 5s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
   )

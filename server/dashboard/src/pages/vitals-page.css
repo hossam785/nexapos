@@ -1,0 +1,25 @@
+.vitals-page { display:flex; flex-direction:column; gap:18px; min-width:0; color:var(--text-primary); font-size:14px; }
+.vitals-page * { box-sizing:border-box; }
+.vitals-header,.vitals-actions { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; min-width:0; }
+.vitals-actions { justify-content:flex-start; }
+.vitals-page h1 { font-size:24px; margin:0; }
+.vitals-page p { color:var(--text-secondary); margin:8px 0 0; overflow-wrap:anywhere; }
+.vitals-page button,.vitals-toggle { min-height:44px; display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border:1px solid var(--border-medium); border-radius:8px; background:var(--bg-elevated); color:var(--text-primary); font:inherit; cursor:pointer; }
+.vitals-page button { border-color:var(--emerald-border); }
+.vitals-toggle input { width:18px; height:18px; accent-color:var(--emerald-base); }
+.vitals-page button:focus-visible,.vitals-toggle input:focus-visible { outline:3px solid var(--emerald-base); outline-offset:3px; }
+.vitals-updated { color:var(--text-secondary); }
+.vitals-alert { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--rose-base); background:var(--rose-subtle); padding:14px; border-radius:8px; overflow-wrap:anywhere; }
+.vitals-grid,.vitals-details { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:16px; }
+.vitals-details { grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); }
+.vitals-panel { min-width:0; padding:20px; border:1px solid var(--border-subtle); border-radius:10px; background:var(--bg-surface); overflow-wrap:anywhere; }
+.vitals-panel h2 { display:flex; align-items:center; gap:8px; margin:0 0 16px; font-size:16px; }
+.vitals-panel h2 svg { flex:none; color:var(--emerald-base); }
+.vitals-value { font-size:22px; font-weight:700; margin-bottom:12px; }
+.vitals-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--border-subtle); }
+.vitals-row span { color:var(--text-secondary); }
+.vitals-row strong { text-align:end; min-width:0; }
+.vitals-status { color:var(--text-secondary); }
+.vitals-status.healthy { color:var(--emerald-base); }
+.vitals-status.degraded { color:var(--amber-base); }
+.vitals-status.high { color:var(--rose-base); }

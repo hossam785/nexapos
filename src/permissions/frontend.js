@@ -36,11 +36,13 @@ export function getTemplatePermissionKeys(templateName = 'cashier') {
 }
 
 export function canViewPage(userOrPermissions, pageKey) {
+  if (userOrPermissions?.role === 'admin') return true
   const permissions = userOrPermissions?.permissions || userOrPermissions
   return Boolean(permissions?.pages?.[pageKey])
 }
 
 export function canDo(userOrPermissions, actionKey) {
+  if (userOrPermissions?.role === 'admin') return true
   const permissions = userOrPermissions?.permissions || userOrPermissions
   return Boolean(permissions?.actions?.[actionKey])
 }
@@ -63,3 +65,6 @@ export function groupActions() {
     return acc
   }, {})
 }
+
+export { shouldMaskCostPrice, shouldMaskProfit, formatMaskedMetric } from './financialMasking'
+

@@ -2,10 +2,10 @@ const base = require('./electron-builder.base')
 
 module.exports = {
   ...base,
-  appId: 'com.mgivia.pos.admin',
-  productName: 'MGIVIA POS admin',
-  executableName: 'MGIVIA POS admin',
-  artifactName: 'MGIVIA POS admin.${ext}',
+  appId: 'com.nexapos.admin',
+  productName: 'NEXA POS admin',
+  executableName: 'NEXA POS admin',
+  artifactName: 'NEXA POS admin.${ext}',
   directories: {
     output: 'releases/admin',
   },
@@ -15,8 +15,8 @@ module.exports = {
   },
   nsis: {
     ...base.nsis,
-    shortcutName: 'MGIVIA POS admin',
-    uninstallDisplayName: 'MGIVIA POS admin',
+    shortcutName: 'NEXA POS admin',
+    uninstallDisplayName: 'NEXA POS admin',
   },
 }
 

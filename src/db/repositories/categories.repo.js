@@ -21,11 +21,32 @@ function createCategoriesRepo({ db, auditDB }) {
 
   return {
     getAll: () => {
-      const rows = db.prepare('SELECT * FROM categories').all()
+      const rows = db.prepare('SELECT * FROM categories ORDER BY id ASC').all()
+      const countsMap = new Map()
+      try {
+        const counts = db.prepare('SELECT category_id, COUNT(*) as cnt FROM products WHERE is_active = 1 GROUP BY category_id').all()
+        for (const c of counts) {
+          if (c.category_id != null) countsMap.set(c.category_id, c.cnt)
+        }
+        const nullCatCount = db.prepare('SELECT COUNT(*) as cnt FROM products WHERE category_id IS NULL AND is_active = 1').get()?.cnt || 0
+        if (nullCatCount > 0) {
+          const generalCat = rows.find(r => r.name === 'عام' || r.id === 1)
+          if (generalCat) {
+            countsMap.set(generalCat.id, (countsMap.get(generalCat.id) || 0) + nullCatCount)
+          }
+        }
+      } catch (_) {}
+
       return rows.map((row) => {
         const normalizedName = normalizeCategoryName(row.name)
-        persistNormalizedName(row.id, row.name, normalizedName)
-        return { ...row, name: normalizedName }
+        if (row.name !== normalizedName) {
+          persistNormalizedName(row.id, row.name, normalizedName)
+        }
+        return {
+          ...row,
+          name: normalizedName,
+          product_count: countsMap.get(row.id) || 0,
+        }
       })
     },
 
@@ -59,11 +80,48 @@ function createCategoriesRepo({ db, auditDB }) {
       return result
     },
 
+    setAllCashierVisibility: (visible, categoryIds = null) => {
+      const nextVisible = visible ? 1 : 0
+      let result
+      if (Array.isArray(categoryIds) && categoryIds.length > 0) {
+        const placeholders = categoryIds.map(() => '?').join(',')
+        result = db.prepare(`UPDATE categories SET visible_in_cashier = ? WHERE id IN (${placeholders})`).run(nextVisible, ...categoryIds)
+      } else {
+        result = db.prepare('UPDATE categories SET visible_in_cashier = ?').run(nextVisible)
+      }
+      try {
+        auditDB.log({
+          action: 'category.cashier_visibility_all',
+          entityType: 'category',
+          entityId: 0,
+          entityName: 'جميع الفئات',
+          details: { visible_in_cashier: nextVisible, affectedRows: result.changes },
+        })
+      } catch (e) {}
+      return result
+    },
+
     delete: (id) => {
-      const category = db.prepare('SELECT name FROM categories WHERE id = ?').get(id)
+      const category = db.prepare('SELECT id, name FROM categories WHERE id = ?').get(id)
+      if (!category) return { changes: 0 }
+
+      const normalizedName = normalizeCategoryName(category.name)
+      if (normalizedName === 'عام') {
+        const error = new Error('لا يمكن حذف الفئة الافتراضية (عام).')
+        error.code = 'CANNOT_DELETE_DEFAULT_CATEGORY'
+        throw error
+      }
+
       const transaction = db.transaction(() => {
-        db.prepare('UPDATE products SET category_id = NULL WHERE category_id = ?').run(id)
-        db.prepare('DELETE FROM categories WHERE id = ?').run(id)
+        let defaultCat = db.prepare("SELECT id FROM categories WHERE name = 'عام' LIMIT 1").get()
+        if (!defaultCat) {
+          const insertRes = db.prepare("INSERT INTO categories (name) VALUES ('عام')").run()
+          defaultCat = { id: insertRes.lastInsertRowid }
+        }
+
+        db.prepare('UPDATE products SET category_id = ? WHERE category_id = ?').run(defaultCat.id, id)
+        const result = db.prepare('DELETE FROM categories WHERE id = ?').run(id)
+        return result
       })
       const result = transaction()
       try {
@@ -71,7 +129,7 @@ function createCategoriesRepo({ db, auditDB }) {
           action: 'category.delete',
           entityType: 'category',
           entityId: id,
-          entityName: normalizeCategoryName(category?.name),
+          entityName: normalizedName,
         })
       } catch (e) {}
       return result

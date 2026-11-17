@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Save, Store, Receipt, Printer, Settings as SettingsIcon,
   Database, Info, RefreshCw, AlertTriangle, Users, Lock,
@@ -271,7 +271,7 @@ export default function SettingsPage({ user, onSettingsChange }) {
   async function handleTestPrint() {
     const testHTML = `
       <div style="font-family:Arial;text-align:center;padding:20px;">
-      <h2>${settings.store_name || 'MGIVIA'}</h2>
+      <h2>${settings.store_name || 'NEXA POS'}</h2>
         <p>Ø§ØªÙˆØ±Ø© ØªØ¬Ø±ÙŠØ¨ÙŠØ©</p>
         <hr style="border:1px dashed #000;margin:10px 0"/>
         <p style="font-weight:bold;">Ø§Ø®ØªØ¨Ø§Ø± Ø§Ù„Ø·Ø¨Ø§Ø¹Ø© âœ“</p>
@@ -839,7 +839,7 @@ export default function SettingsPage({ user, onSettingsChange }) {
           <SectionCard title="Ù…Ø¹Ù„ÙˆÙ…Ø§Øª Ø§Ù„Ù†Ø¸Ø§Ù…" icon={User} iconColor="text-emerald-600">
             <div className="space-y-2 text-sm border-t border-slate-100 pt-3">
               {[
-                ['Ø§Ù„Ù…Ø·ÙˆØ±', 'MGIVIA'],
+                ['Ø§Ù„Ù…Ø·ÙˆØ±', 'NEXA POS'],
                 ['Ù†ÙˆØ¹ Ø§Ù„Ù†Ø¸Ø§Ù…', 'Desktop POS System'],
                 ['ا�إصدار', window.mgpos?.version || '1.2.2'],
                 ['Ø§Ù„Ù„ØºØ©', 'Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©'],
@@ -854,14 +854,14 @@ export default function SettingsPage({ user, onSettingsChange }) {
             </div>
           </SectionCard>
 
-          {/* 3) ÙƒØ§Ø±Øª Ø§Ù„Ø¯ØºÙ… Ø§Ù„ÙÙ†ÙŠ */}
-          <SectionCard title="Ø§Ù„Ø¯Ø¹Ù… Ø§Ù„ÙÙ†ÙŠ" icon={Phone} iconColor="text-emerald-600">
+          {/* 3) ÙƒØ§Ø±Øª Ø§Ù„Ø¯ØºÙ… Ø§Ù„Ù Ù†ÙŠ */}
+          <SectionCard title="Ø§Ù„Ø¯Ø¹Ù… Ø§Ù„Ù Ù†ÙŠ" icon={Phone} iconColor="text-emerald-600">
             <div className="space-y-2 text-sm border-t border-slate-100 pt-3">
               {[
-                ['Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ', 'mgiviacompany@gmail.com'],
-                ['ÙˆØ§ØªØ³Ø§Ø¨', '01152520844'],
+                ['Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ', 'nexaposinfo@gmail.com'],
+                ['واتساب', '0788383558'],
                 ['Ø³Ø§Ø¹Ø§Øª Ø§Ù„Ø¯Ø¹Ù…', 'ÙŠÙˆÙ…ÙŠÙ‹Ø§ Ù…Ù† 10 Øµ Ø¥Ù„Ù‰ 5 Ù…'],
-                ['Ù†ÙˆØ¹ Ø§Ù„Ø¯Ø¹Ù…', 'ÙÙ†ÙŠ - ØªØ­Ø¯ÙŠØ«Ø§Øª - ØªÙØ¹ÙŠÙ„'],
+                ['Ù†ÙˆØ¹ Ø§Ù„Ø¯Ø¹Ù…', 'Ù Ù†ÙŠ - ØªØ­Ø¯ÙŠØ«Ø§Øª - ØªÙ Ø¹ÙŠÙ„'],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between items-center py-2 border-b border-slate-50 last:border-0">
                   <span className="text-slate-500 whitespace-nowrap ml-2">{k}</span>
@@ -873,14 +873,14 @@ export default function SettingsPage({ user, onSettingsChange }) {
             {/* Action Buttons (CTA) */}
             <div className="flex gap-2.5 mt-2 pt-4 border-t border-slate-100">
               <button
-                onClick={() => window.open('https://wa.me/201152520844', '_blank')}
+                onClick={() => window.open('https://wa.me/962788383558', '_blank')}
                 className="flex-1 flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm"
               >
                 <MessageCircle size={16} />
                 ÙˆØ§ØªØ³Ø§Ø¨
               </button>
               <button
-                onClick={() => window.open('mailto:mgiviacompany@gmail.com', '_blank')}
+                onClick={() => window.open('mailto:nexaposinfo@gmail.com', '_blank')}
                 className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm"
               >
                 <Mail size={16} />
@@ -1006,7 +1006,7 @@ export default function SettingsPage({ user, onSettingsChange }) {
           </div>
           <div>
             <h1 className="text-base font-bold text-slate-800 leading-tight">Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù†Ø¸Ø§Ù…</h1>
-            <p className="text-xs text-slate-400">ØªØ®ØµÙŠØµ ÙˆØ¥Ø¯Ø§Ø±Ø© Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª MGIVIA</p>
+            <p className="text-xs text-slate-400">ØªØ®ØµÙŠØµ ÙˆØ¥Ø¯Ø§Ø±Ø© Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª NEXA POS</p>
           </div>
         </div>
         <SaveButton onClick={handleSave} saving={saving} saved={saved} disabled={!canEditSettings} />

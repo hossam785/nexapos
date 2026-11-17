@@ -1,3 +1,40 @@
+function normalizeDateString(dateVal) {
+  if (!dateVal) return null
+  if (typeof dateVal === 'string') {
+    const trimmed = dateVal.trim().slice(0, 10)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  }
+  const d = new Date(dateVal)
+  if (isNaN(d.getTime())) return null
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function addDaysToDate(dateStr, days) {
+  if (!dateStr || !days) return null
+  const norm = normalizeDateString(dateStr)
+  if (!norm) return null
+  const [y, m, d] = norm.split('-').map(Number)
+  const dateObj = new Date(y, m - 1, d + parseInt(days, 10))
+  const resYear = dateObj.getFullYear()
+  const resMonth = String(dateObj.getMonth() + 1).padStart(2, '0')
+  const resDay = String(dateObj.getDate()).padStart(2, '0')
+  return `${resYear}-${resMonth}-${resDay}`
+}
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null
+  const norm = normalizeDateString(dateStr)
+  if (!norm) return null
+  const [y, m, d] = norm.split('-').map(Number)
+  const targetMidnight = new Date(y, m - 1, d).getTime()
+  const now = new Date()
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  return Math.round((targetMidnight - todayMidnight) / (1000 * 60 * 60 * 24))
+}
+
 function createBatchesRepo({ db, auditDB }) {
   return {
     getByProduct: (productId) =>
@@ -17,47 +54,46 @@ function createBatchesRepo({ db, auditDB }) {
       `).all(productId),
 
     add: (data) => {
-      let expiryDate = data.expiry_date || null
+      let expiryDate = normalizeDateString(data.expiry_date) || null
       if (!expiryDate && data.production_date && data.shelf_life_days) {
-        const prod = new Date(data.production_date)
-        prod.setDate(prod.getDate() + parseInt(data.shelf_life_days))
-        expiryDate = prod.toISOString().slice(0, 10)
+        expiryDate = addDaysToDate(data.production_date, data.shelf_life_days)
       }
       let status = 'active'
       if (expiryDate) {
-        const today = new Date().toISOString().slice(0, 10)
-        if (expiryDate < today) {
-          status = 'expired'
-        } else {
-          const alertDays = parseInt(data.alertDays || 7)
-          const diffDays = Math.ceil((new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24))
-          if (diffDays <= alertDays) status = 'expiring'
+        const diffDays = daysUntil(expiryDate)
+        if (diffDays !== null) {
+          if (diffDays < 0) {
+            status = 'expired'
+          } else {
+            const alertDays = parseInt(data.alertDays || 7, 10)
+            if (diffDays <= alertDays) status = 'expiring'
+          }
         }
       }
       const batchNum = data.batch_number || `BATCH-${Date.now()}`
       const qty = parseFloat(data.quantity) || 0
-      const result = db.prepare(`
-        INSERT INTO product_batches
-          (product_id, batch_number, production_date, expiry_date, shelf_life_days,
-           quantity, remaining_quantity, purchase_price, supplier_id, status, notes, created_by)
-        VALUES
-          (@product_id, @batch_number, @production_date, @expiry_date, @shelf_life_days,
-           @quantity, @remaining_quantity, @purchase_price, @supplier_id, @status, @notes, @created_by)
-      `).run({
-        product_id: data.product_id,
-        batch_number: batchNum,
-        production_date: data.production_date || null,
-        expiry_date: expiryDate,
-        shelf_life_days: data.shelf_life_days || null,
-        quantity: qty,
-        remaining_quantity: qty,
-        purchase_price: parseFloat(data.purchase_price) || 0,
-        supplier_id: data.supplier_id || null,
-        status,
-        notes: data.notes || null,
-        created_by: data.created_by || null,
-      })
-      try {
+      return db.transaction(() => {
+        const result = db.prepare(`
+          INSERT INTO product_batches
+            (product_id, batch_number, production_date, expiry_date, shelf_life_days,
+             quantity, remaining_quantity, purchase_price, supplier_id, status, notes, created_by)
+          VALUES
+            (@product_id, @batch_number, @production_date, @expiry_date, @shelf_life_days,
+             @quantity, @remaining_quantity, @purchase_price, @supplier_id, @status, @notes, @created_by)
+        `).run({
+          product_id: data.product_id,
+          batch_number: batchNum,
+          production_date: data.production_date || null,
+          expiry_date: expiryDate,
+          shelf_life_days: data.shelf_life_days || null,
+          quantity: qty,
+          remaining_quantity: qty,
+          purchase_price: parseFloat(data.purchase_price) || 0,
+          supplier_id: data.supplier_id || null,
+          status,
+          notes: data.notes || null,
+          created_by: data.created_by || null,
+        })
         const product = db.prepare('SELECT name FROM products WHERE id = ?').get(data.product_id)
         auditDB.log({
           userId: data.created_by || null,
@@ -65,32 +101,25 @@ function createBatchesRepo({ db, auditDB }) {
           entityType: 'batch',
           entityId: result.lastInsertRowid,
           entityName: product?.name,
-          details: {
-            batch_number: batchNum,
-            quantity: qty,
-            status,
-            expiry_date: expiryDate,
-          },
+          details: { batch_number: batchNum, quantity: qty, status, expiry_date: expiryDate },
         })
-      } catch (e) {}
-      return { id: result.lastInsertRowid, expiryDate, status }
+        return { id: result.lastInsertRowid, expiryDate, status }
+      })()
     },
 
-    updateStatus: (id, status) => {
+    updateStatus: (id, status) => db.transaction(() => {
       const batch = db.prepare('SELECT product_id, batch_number FROM product_batches WHERE id = ?').get(id)
       const result = db.prepare('UPDATE product_batches SET status = ? WHERE id = ?').run(status, id)
-      try {
-        const product = batch?.product_id ? db.prepare('SELECT name FROM products WHERE id = ?').get(batch.product_id) : null
-        auditDB.log({
-          action: 'batch.update',
-          entityType: 'batch',
-          entityId: id,
-          entityName: product?.name || batch?.batch_number,
-          details: { status, batch_number: batch?.batch_number || null },
-        })
-      } catch (e) {}
+      const product = batch?.product_id ? db.prepare('SELECT name FROM products WHERE id = ?').get(batch.product_id) : null
+      auditDB.log({
+        action: 'batch.update',
+        entityType: 'batch',
+        entityId: id,
+        entityName: product?.name || batch?.batch_number,
+        details: { status, batch_number: batch?.batch_number || null },
+      })
       return result
-    },
+    })(),
 
     addAction: (batchId, action, notes, userId) => {
       const allowed = ['apply_discount', 'mark_as_damaged', 'return_to_supplier', 'ignore']
@@ -104,29 +133,39 @@ function createBatchesRepo({ db, auditDB }) {
       const transaction = db.transaction(() => {
         db.prepare('UPDATE product_batches SET status = ? WHERE id = ?').run(statusMap[action] || 'expiring', batchId)
         db.prepare('INSERT INTO batch_actions (batch_id, action, notes, user_id) VALUES (?, ?, ?, ?)').run(batchId, action, notes || null, userId || null)
-        try {
-          const batch = db.prepare('SELECT batch_number, product_id FROM product_batches WHERE id = ?').get(batchId)
-          const product = batch?.product_id ? db.prepare('SELECT name FROM products WHERE id = ?').get(batch.product_id) : null
-          auditDB.log({
-            userId: userId || null,
-            action: 'batch.action',
-            entityType: 'batch',
-            entityId: batchId,
-            entityName: product?.name || batch?.batch_number,
-            details: { action, notes: notes || '', batch_number: batch?.batch_number || null },
-          })
-        } catch (e) {}
+        const batch = db.prepare('SELECT batch_number, product_id FROM product_batches WHERE id = ?').get(batchId)
+        const product = batch?.product_id ? db.prepare('SELECT name FROM products WHERE id = ?').get(batch.product_id) : null
+        auditDB.log({
+          userId: userId || null,
+          action: 'batch.action',
+          entityType: 'batch',
+          entityId: batchId,
+          entityName: product?.name || batch?.batch_number,
+          details: { action, notes: notes || '', batch_number: batch?.batch_number || null },
+        })
       })
       return transaction()
     },
 
-    consumeFEFO: (productId, qtyNeeded) => {
+    consumeFEFO: (productId, qtyNeeded, warehouse = null) => {
+      const warehouseId = warehouse?.id ?? warehouse ?? null
+      const numericWarehouseId = warehouseId === null || warehouseId === '' ? null : Number(warehouseId)
+      if (numericWarehouseId !== null && (!Number.isSafeInteger(numericWarehouseId) || numericWarehouseId <= 0)) return []
+      const includeLegacyMain = warehouse && typeof warehouse === 'object' && warehouse.is_default ? 1 : 0
       const batches = db.prepare(`
         SELECT * FROM product_batches
         WHERE product_id = ? AND status != 'expired' AND status != 'damaged' AND status != 'returned'
           AND remaining_quantity > 0
-        ORDER BY expiry_date ASC, created_at ASC
-      `).all(productId)
+          AND (
+            ? IS NULL
+            OR CAST(warehouse_id AS INTEGER) = ?
+            OR (? = 1 AND (warehouse_id IS NULL OR warehouse_id = '' OR warehouse_id = 'main'))
+          )
+        ORDER BY 
+          CASE WHEN expiry_date IS NOT NULL AND expiry_date != '' THEN 0 ELSE 1 END,
+          expiry_date ASC, 
+          created_at ASC
+      `).all(productId, numericWarehouseId, numericWarehouseId, includeLegacyMain)
 
       let remaining = qtyNeeded
       const consumed = []
@@ -138,17 +177,21 @@ function createBatchesRepo({ db, auditDB }) {
         if (newRemaining <= 0) {
           db.prepare("UPDATE product_batches SET status = 'depleted' WHERE id = ?").run(b.id)
         }
-        consumed.push({ batchId: b.id, taken: take })
+        consumed.push({ 
+          batchId: b.id, 
+          taken: take, 
+          purchasePrice: b.purchase_price != null ? Number(b.purchase_price) : null 
+        })
         remaining -= take
       }
       return consumed
     },
 
     refreshAllStatuses: (alertDays = 7) => {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
       const alertDate = new Date()
       alertDate.setDate(alertDate.getDate() + alertDays)
-      const alertDateStr = alertDate.toISOString().slice(0, 10)
+      const alertDateStr = new Date(alertDate.getTime() - alertDate.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 
       db.prepare(`
         UPDATE product_batches
@@ -172,7 +215,7 @@ function createBatchesRepo({ db, auditDB }) {
     getExpiryAlerts: (alertDays = 7) => {
       const alertDate = new Date()
       alertDate.setDate(alertDate.getDate() + alertDays)
-      const alertDateStr = alertDate.toISOString().slice(0, 10)
+      const alertDateStr = new Date(alertDate.getTime() - alertDate.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 
       return db.prepare(`
         SELECT pb.*, p.name as product_name, p.auto_hide_expired
@@ -213,8 +256,8 @@ function createBatchesRepo({ db, auditDB }) {
     getExpiringSoon: (alertDays = 7) => {
       const alertDate = new Date()
       alertDate.setDate(alertDate.getDate() + alertDays)
-      const alertDateStr = alertDate.toISOString().slice(0, 10)
-      const today = new Date().toISOString().slice(0, 10)
+      const alertDateStr = new Date(alertDate.getTime() - alertDate.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+      const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
       return db.prepare(`
         SELECT pb.*, p.name as product_name, p.sell_price, p.unit
         FROM product_batches pb

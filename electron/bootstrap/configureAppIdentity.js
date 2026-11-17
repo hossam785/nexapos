@@ -1,8 +1,8 @@
 const fs = require('fs')
 const path = require('path')
 
-const APP_NAME = 'MGIVIA'
-const APP_ID = 'com.mgivia.desktop'
+const APP_NAME = 'NEXA'
+const APP_ID = 'com.nexapos.desktop'
 const legacyBrandDirName = ['M', 'givia'].join('')
 const legacyAppName = ['E', 'mtyaz'].join('')
 const LEGACY_USERDATA_DIRS = ['mg-pos', 'MG POS', legacyAppName, legacyBrandDirName]
@@ -11,6 +11,7 @@ const RUNTIME_FILES_TO_MIGRATE = [
   'mgpos.db-shm',
   'mgpos.db-wal',
   'trial.json',
+  'license.nexalic',
   'license.json',
   'cashier-connection.json',
 ]

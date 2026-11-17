@@ -2,8 +2,16 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      try {
+        const language = localStorage.getItem('mgpos.language') === 'en' ? 'en' : 'ar'
+        document.documentElement.lang = language
+        document.documentElement.dir = language === 'en' ? 'ltr' : 'rtl'
+      } catch {}
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MGIVIA POS</title>
+    <link rel="icon" type="image/png" href="/NexalogoIcon.png" />
+    <title>NEXA POS</title>
   </head>
   <body>
     <div id="root"></div>

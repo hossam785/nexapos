@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* @theme is valid Tailwind CSS v4 syntax – VS Code warning is a false positive */
 @theme {
   --font-sans: "Segoe UI", Tahoma, Arial, sans-serif;
@@ -7,6 +9,40 @@
 
 html, body, * {
   font-family: "Segoe UI", Tahoma, Arial, sans-serif !important;
+}
+
+html[dir="ltr"] body,
+html[dir="ltr"] #root,
+html[dir="ltr"] [dir="rtl"]:not([data-preserve-dir]) {
+  direction: ltr !important;
+}
+
+html[dir="rtl"] body,
+html[dir="rtl"] #root,
+html[dir="rtl"] [dir="ltr"][data-ui-direction] {
+  direction: rtl !important;
+}
+
+html[dir="ltr"] .text-right:not([data-preserve-align]) {
+  text-align: left !important;
+}
+
+html[dir="ltr"] .text-left:not([data-preserve-align]) {
+  text-align: right !important;
+}
+
+html[dir="ltr"] input:not([type="number"]),
+html[dir="ltr"] textarea {
+  text-align: left;
+}
+
+html[dir="rtl"] input:not([type="number"]),
+html[dir="rtl"] textarea {
+  text-align: right;
+}
+
+input, textarea, [data-no-translate], [translate="no"] {
+  unicode-bidi: plaintext;
 }
 
 @keyframes fadeUp {
@@ -51,8 +87,33 @@ html, body, * {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.custom-scrollbar::-webkit-scrollbar { width: 6px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+/* Global sleek scrollbar styling across the application */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 9999px; }
 .sidebar-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(167, 243, 208, 0.5) transparent;

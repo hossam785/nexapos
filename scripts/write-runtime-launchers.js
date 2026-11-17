@@ -11,7 +11,7 @@ function buildAdminLaunchers(outputDir) {
     '@echo off',
     'setlocal',
     'set "MGPOS_RUNTIME_PROFILE=admin"',
-    'start "" "%~dp0win-unpacked\\MGIVIA POS.exe"',
+    'start "" "%~dp0win-unpacked\\NEXA POS admin.exe"',
     'endlocal',
     '',
   ].join('\r\n')
@@ -20,7 +20,7 @@ function buildAdminLaunchers(outputDir) {
     '@echo off',
     'setlocal',
     'set "MGPOS_RUNTIME_PROFILE=server"',
-    'start "" "%~dp0win-unpacked\\MGIVIA POS.exe"',
+    'start "" "%~dp0win-unpacked\\NEXA POS admin.exe"',
     'endlocal',
     '',
   ].join('\r\n')
@@ -34,7 +34,7 @@ function buildCashierLaunchers(outputDir) {
     '@echo off',
     'setlocal',
     'set "MGPOS_RUNTIME_PROFILE=cashier"',
-    'start "" "%~dp0win-unpacked\\MGIVIA POS.exe"',
+    'start "" "%~dp0win-unpacked\\NEXA POS cashier.exe"',
     'endlocal',
     '',
   ].join('\r\n')

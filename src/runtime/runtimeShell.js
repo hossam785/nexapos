@@ -1,6 +1,6 @@
 import { canViewPage } from '../permissions/frontend'
 
-const DESKTOP_PAGES = ['cashier', 'purchases', 'products', 'reports', 'suppliers', 'promotions', 'warehouse', 'day-closing', 'shifts', 'settings', 'users', 'audit']
+const DESKTOP_PAGES = ['cashier', 'purchases', 'products', 'reports', 'treasury', 'suppliers', 'promotions', 'loyalty', 'warehouse', 'day-closing', 'shifts', 'settings', 'users', 'audit']
 
 export function getRuntimeProfileFromLocation() {
   try {
@@ -50,19 +50,15 @@ export function getDefaultPageForRuntime(runtimeProfile, user, fallbackPage = 'c
   const allowedPages = getAllowedPagesForUser(runtimeProfile, user)
   if (allowedPages.length === 0) return fallbackPage
 
-  if (runtimeProfile === 'admin') {
-    return allowedPages.includes('reports')
-      ? 'reports'
-      : allowedPages.includes('cashier')
-      ? 'cashier'
-      : allowedPages[0]
+  if (fallbackPage && allowedPages.includes(fallbackPage)) {
+    return fallbackPage
   }
 
-  if (runtimeProfile === 'cashier') {
-    return allowedPages.includes('cashier') ? 'cashier' : allowedPages[0]
+  if (allowedPages.includes('cashier')) {
+    return 'cashier'
   }
 
-  return allowedPages.includes(fallbackPage) ? fallbackPage : allowedPages[0]
+  return allowedPages[0] || fallbackPage
 }
 
 export function sanitizePageForRuntime(page, runtimeProfile, user) {

@@ -2,9 +2,16 @@ function registerLicenseHandlers({ ipcMain, licenseService, auditDB }) {
   ipcMain.handle('license:get-machine-id', () => licenseService.getMachineId())
 
   ipcMain.handle('license:activate', (_, licenseData) => {
-    const result = licenseService.verifyLicense(licenseData)
+    let result = typeof licenseData === 'string' && licenseData.length <= 16 * 1024
+      ? licenseService.verifyLicense(licenseData)
+      : { valid: false, reason: 'INVALID_FORMAT' }
     if (result.valid) {
-      licenseService.saveLicense(licenseData)
+      try {
+        licenseService.saveLicense(licenseData)
+      } catch (e) {
+        console.error('License activation: failed to save license:', e)
+        result = { valid: false, reason: 'SAVE_FAILED' }
+      }
     }
     try {
       auditDB.log({
@@ -17,7 +24,9 @@ function registerLicenseHandlers({ ipcMain, licenseService, auditDB }) {
           reason: result.reason || null,
         },
       })
-    } catch (e) {}
+    } catch (e) {
+      console.error('License activation: failed to record audit:', e)
+    }
     return result
   })
 

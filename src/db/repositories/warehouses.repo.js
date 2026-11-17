@@ -13,7 +13,7 @@ function createWarehousesRepo({ db, auditDB, syncWarehouseToLegacy }) {
   const unsetDefaultWarehousesStmt = db.prepare('UPDATE warehouses SET is_default = 0 WHERE id != ?')
   const unsetPosSourceWarehousesStmt = db.prepare('UPDATE warehouses SET is_pos_source = 0 WHERE id != ?')
   const deactivateWarehouseStmt = db.prepare('UPDATE warehouses SET is_active = 0 WHERE id = ?')
-  const deleteEmptyWarehouseInventoryStmt = db.prepare('DELETE FROM warehouse_inventory WHERE warehouse_id = ? AND quantity <= 0')
+  const deleteEmptyWarehouseInventoryStmt = db.prepare('DELETE FROM warehouse_inventory WHERE warehouse_id = ? AND quantity = 0')
   const upsertWarehouseInventoryStmt = db.prepare(`
     INSERT INTO warehouse_inventory (warehouse_id, product_id, quantity)
     VALUES (?, ?, ?)
@@ -31,7 +31,7 @@ function createWarehousesRepo({ db, auditDB, syncWarehouseToLegacy }) {
 
     getActiveWarehouseCount: () => db.prepare('SELECT COUNT(*) as cnt FROM warehouses WHERE is_active = 1').get()?.cnt || 0,
 
-    getWarehouseStockTotal: (warehouseId) => db.prepare('SELECT SUM(quantity) as total FROM warehouse_inventory WHERE warehouse_id = ? AND quantity > 0').get(warehouseId)?.total || 0,
+    getWarehouseStockTotal: (warehouseId) => db.prepare('SELECT SUM(ABS(quantity)) as total FROM warehouse_inventory WHERE warehouse_id = ? AND quantity != 0').get(warehouseId)?.total || 0,
 
     insertWarehouse: (data) => insertWarehouseStmt.run({
       name: data.name,
@@ -183,8 +183,22 @@ function createWarehousesRepo({ db, auditDB, syncWarehouseToLegacy }) {
       if (warehouse.is_pos_source) throw new Error('لا يمكن حذف مخزن البيع. قم بتعيين مخزن آخر أولاً.')
       if (warehouse.is_default) throw new Error('لا يمكن حذف المخزن الافتراضي. قم بتعيين مخزن آخر أولاً.')
 
-      const hasStock = db.prepare('SELECT SUM(quantity) as total FROM warehouse_inventory WHERE warehouse_id = ? AND quantity > 0').get(id)
-      if (hasStock?.total > 0) throw new Error(`لا يمكن حذف المخزن - يحتوي على ${hasStock.total} وحدة. قم بنقل المخزون أولاً.`)
+      const nonZeroStock = db.prepare(`
+        SELECT 
+          COALESCE(SUM(CASE WHEN quantity > 0 THEN quantity ELSE 0 END), 0) as positive_total,
+          COALESCE(SUM(CASE WHEN quantity < 0 THEN ABS(quantity) ELSE 0 END), 0) as negative_total
+        FROM warehouse_inventory 
+        WHERE warehouse_id = ? AND quantity != 0
+      `).get(id)
+
+      if (nonZeroStock && (nonZeroStock.positive_total > 0 || nonZeroStock.negative_total > 0)) {
+        if (nonZeroStock.positive_total > 0) {
+          throw new Error(`لا يمكن حذف المخزن - يحتوي على ${nonZeroStock.positive_total} وحدة رصيد موجب. قم بنقل المخزون أولاً.`)
+        }
+        if (nonZeroStock.negative_total > 0) {
+          throw new Error(`لا يمكن حذف المخزن - يحتوي على عجز رصيد سالب بقيمة ${nonZeroStock.negative_total} وحدة. قم بإجراء تسوية جرد أو تغذية للمخزن أولاً.`)
+        }
+      }
 
       deactivateWarehouseStmt.run(id)
       deleteEmptyWarehouseInventoryStmt.run(id)

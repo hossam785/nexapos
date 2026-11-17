@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, Printer, Tag, Plus, Minus } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
+import { escapeHtml } from '../../utils/htmlEscape'
 
 export default function BarcodeModal({ product, settings, onClose }) {
   const svgRef = useRef()
+  const printingRef = useRef(false)
   const [copies, setCopies] = useState(1)
   const [error, setError] = useState(false)
   const [labelMode, setLabelMode] = useState('unit')
@@ -11,7 +13,7 @@ export default function BarcodeModal({ product, settings, onClose }) {
   const [barcodeHeight, setBarcodeHeight] = useState(70)
 
   const currency = settings?.currency || '\u062c.\u0645'
-  const storeName = String(settings?.store_name || '').trim() || 'MGIVIA'
+  const storeName = String(settings?.store_name || '').trim() || 'MG POS'
   const safeBarcodeWidth = Math.max(120, Math.min(420, Number(barcodeWidth) || 220))
   const safeBarcodeHeight = Math.max(35, Math.min(160, Number(barcodeHeight) || 70))
   const productTaxValue = Math.max(0, Number(product?.product_tax_rate || 0) || 0)
@@ -62,17 +64,21 @@ export default function BarcodeModal({ product, settings, onClose }) {
   }, [activeBarcode, product?.barcode_type, safeBarcodeHeight])
 
   async function handlePrint() {
-    if (!activeBarcode) return
-
+    // a second press while the print is being sent is ignored
+    if (!activeBarcode || printingRef.current) return
+    printingRef.current = true
+    try {
+    // names come from people (product, store): they are escaped before they go into the print window's HTML
     const svgEl = svgRef.current
     const svgString = svgEl ? svgEl.outerHTML : ''
+    const safePrice = Number.isFinite(activePrice) ? activePrice.toFixed(2) : '0.00'
     const labels = Array.from({ length: copies }, () => `
       <div class="label">
-        <div class="store-name">${storeName}</div>
-        <div class="prod-name">${activeName}</div>
+        <div class="store-name">${escapeHtml(storeName)}</div>
+        <div class="prod-name">${escapeHtml(activeName)}</div>
         <div class="barcode-wrap">${svgString}</div>
-        <div class="barcode-num">${activeBarcode}</div>
-        <div class="price">${activePrice.toFixed(2)} ${currency}</div>
+        <div class="barcode-num">${escapeHtml(activeBarcode)}</div>
+        <div class="price">${safePrice} ${escapeHtml(currency)}</div>
       </div>
     `).join('')
 
@@ -81,7 +87,7 @@ export default function BarcodeModal({ product, settings, onClose }) {
       <html lang="ar" dir="rtl">
       <head>
         <meta charset="UTF-8"/>
-        <title>Print Barcode - ${activeName}</title>
+        <title>Print Barcode - ${escapeHtml(activeName)}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Arial, sans-serif; background: #fff; }
@@ -106,7 +112,15 @@ export default function BarcodeModal({ product, settings, onClose }) {
       </html>
     `
 
-    await window.mgpos.print(html, {})
+    await window.mgpos.print(html, {
+      documentType: 'label',
+      paperSize: 'label',
+      printerName: settings?.printer_name || undefined,
+      title: '\u0645\u0639\u0627\u064a\u0646\u0629 \u0645\u0644\u0635\u0642\u0627\u062a \u0627\u0644\u0628\u0627\u0631\u0643\u0648\u062f',
+    })
+    } finally {
+      printingRef.current = false
+    }
   }
 
   return (

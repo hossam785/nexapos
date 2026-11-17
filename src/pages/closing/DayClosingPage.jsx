@@ -1,55 +1,71 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { usePosStore } from '../../stores/posStore'
 import {
   Lock, ShieldCheck, CalendarDays, Clock3, Timer, Play, Square, User,
   TrendingUp, Receipt, Wallet, Tags, RotateCcw, Banknote, CreditCard,
   Users, UserPlus, BadgeDollarSign, Package, BarChart3, Boxes,
   ArrowDownCircle, ReceiptText, Calculator, CircleDollarSign,
-  RefreshCw, Printer, Eye, FileText, X, CheckCircle, AlertTriangle
+  RefreshCw, Printer, Eye, FileText, X, CheckCircle, AlertTriangle, Sparkles, Coins
 } from 'lucide-react'
 
-const fmt = n => Number(n).toFixed(2)
+const fmt = n => (Number.isFinite(Number(n)) ? Number(n).toFixed(2) : '0.00')
+const cleanError = (error, fallback = 'حصل خطأ، حاول مرة تانية') => String(error?.message || error || '').replace(/^Error invoking remote method '[^']+': (Error: )?/, '').trim() || fallback
+const parseMoneyInput = (value, { blankAsZero = false } = {}) => {
+  const text = String(value ?? '').trim()
+  if (blankAsZero && text === '') return 0
+  if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return null
+  const number = Number(text)
+  return Number.isFinite(number) && number >= 0 && number <= 1_000_000_000 ? number : null
+}
 const parseDate = d => new Date(typeof d === 'string' ? (d.includes(' ') && !d.includes('Z') ? d.replace(' ', 'T') + 'Z' : d) : d)
 const fmtDate = d => d ? parseDate(d).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
 const fmtTime = d => d ? parseDate(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
 
 // ── Stat Card ────────────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, label, value, color = 'blue', sub }) {
-  const colors = {
-    blue:   { bg: 'bg-emerald-50',   icon: 'text-emerald-700',   val: 'text-emerald-900' },
-    green:  { bg: 'bg-green-50',  icon: 'text-green-700',  val: 'text-green-800' },
-    amber:  { bg: 'bg-amber-50',  icon: 'text-amber-700',  val: 'text-amber-800' },
-    red:    { bg: 'bg-red-50',    icon: 'text-red-600',    val: 'text-red-700' },
-    violet: { bg: 'bg-violet-50', icon: 'text-violet-700', val: 'text-violet-800' },
-    slate:  { bg: 'bg-slate-100', icon: 'text-slate-600',  val: 'text-slate-800' },
-    orange: { bg: 'bg-orange-50', icon: 'text-orange-600', val: 'text-orange-800' },
+function StatCard({ icon: Icon, label, value, color = 'emerald', sub }) {
+  const badgeColors = {
+    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+    blue:    'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+    green:   'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+    amber:   'bg-amber-50 text-amber-700 border-amber-200/80',
+    red:     'bg-rose-50 text-rose-700 border-rose-200/80',
+    violet:  'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+    slate:   'bg-slate-100 text-slate-700 border-slate-200',
+    orange:  'bg-amber-50 text-amber-700 border-amber-200/80',
   }
-  const c = colors[color] || colors.blue
+  const badge = badgeColors[color] || badgeColors.emerald
   return (
-    <div className={`${c.bg} rounded-2xl p-4 flex items-center gap-4 border border-slate-100 shadow-sm`}>
-      <div className={`w-11 h-11 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-sm ${c.icon}`}>
-        <Icon size={22} />
+    <div className="bg-white rounded-2xl p-4 flex items-center gap-3.5 border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border ${badge} shadow-2xs`}>
+        <Icon size={18} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs text-slate-500 font-bold mb-0.5 leading-tight">{label}</p>
-        <p className={`text-base sm:text-lg font-black ${c.val} break-words leading-tight`} dir="ltr" style={{ textAlign: 'right' }}>{value}</p>
-        {sub && <p className="text-[10px] text-slate-400 mt-0.5 font-medium leading-tight">{sub}</p>}
+        <p className="text-[11px] text-slate-500 font-bold mb-0.5 leading-tight">{label}</p>
+        <p className="text-base sm:text-lg font-black text-slate-900 font-mono tracking-tight break-words leading-tight" dir="ltr" style={{ textAlign: 'right' }}>
+          {value}
+        </p>
+        {sub && <p className="text-[10px] text-slate-400 mt-0.5 font-bold leading-tight">{sub}</p>}
       </div>
     </div>
   )
 }
 
 // ── Section Wrapper ──────────────────────────────────────────────────────────
-function Section({ title, icon: Icon, iconColor = 'bg-emerald-800', children }) {
+function Section({ title, icon: Icon, iconColor = 'bg-emerald-800', subtitle, children }) {
   return (
-    <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-100 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-40 h-40 bg-emerald-50 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl opacity-50 pointer-events-none" />
+    <div className="bg-white rounded-2xl p-6 shadow-2xs border border-slate-200/80 relative overflow-hidden">
       <div className="relative z-10">
-        <h3 className="font-black text-slate-800 text-lg mb-6 flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-2xl ${iconColor} text-white flex items-center justify-center shadow-lg`}>
-            <Icon size={20} />
+        <div className="flex items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl ${iconColor} text-white flex items-center justify-center shadow-xs`}>
+              <Icon size={18} />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-800 text-base leading-tight">{title}</h3>
+              {subtitle && <p className="text-[10px] text-slate-400 font-bold mt-0.5">{subtitle}</p>}
+            </div>
           </div>
-          {title}
-        </h3>
+        </div>
         {children}
       </div>
     </div>
@@ -89,38 +105,75 @@ export default function DayClosingPage({ user, settings, setPage }) {
   const [notes, setNotes] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [opening, setOpening] = useState(false)
+  const openingRef = useRef(false)
+  const [preparingClose, setPreparingClose] = useState(false)
+  const preparingCloseRef = useRef(false)
+  const [closingBusy, setClosingBusy] = useState(false)
+  const closingRef = useRef(false)
+  const [printBusy, setPrintBusy] = useState(false)
+  const printRef = useRef(false)
+  const loadSeq = useRef(0)
+  const newShiftRef = useRef(false)
+  const [startingNewShift, setStartingNewShift] = useState(false)
   const [openingBalanceValue, setOpeningBalanceValue] = useState('')
+  const [detectedDrawerCash, setDetectedDrawerCash] = useState(null)
   const [startNewShift, setStartNewShift] = useState(false)
   const [closeError, setCloseError] = useState('')
 
   // shift_opened_at comes from DB record (persists across restarts)
   const shiftStart = todayStatus?.shift_opened_at || null
 
-  const currency = settings?.currency || 'ج.م'
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const currency = settings?.currency_symbol || settings?.currency || 'ج.م'
+  const getLocalDateStr = () => {
+    const d = new Date()
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+  }
+  const todayStr = getLocalDateStr()
   const canOpenShiftPermission = canDo(user, 'day_closing.open_shift')
   const canCloseShiftPermission = canDo(user, 'day_closing.close_shift')
   const canReopenPermission = canDo(user, 'day_closing.reopen')
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async ({ notify = true } = {}) => {
+    const seq = ++loadSeq.current
     setLoading(true)
     try {
-      const [status, rpt] = await Promise.all([
-        window.mgpos.db.getTodayClosingStatus().catch(() => null),
-        window.mgpos.db.buildDayReport(todayStr).catch(() => null),
+      if (!user?.id) throw new Error('لازم تسجيل الدخول أولًا')
+      const [status, rpt, drawerResult] = await Promise.all([
+        window.mgpos.db.getTodayClosingStatus(user.id),
+        window.mgpos.db.buildDayReport(todayStr, user.id),
+        Promise.resolve(window.mgpos?.treasury?.getCurrentDrawerBalance?.(user.id) ?? 0)
+          .then((value) => ({ ok: true, value }))
+          .catch((error) => ({ ok: false, error })),
       ])
+      if (seq !== loadSeq.current) return false
+
+      const drawerCash = drawerResult.ok && Number.isFinite(Number(drawerResult.value)) ? Number(drawerResult.value) : null
+      setDetectedDrawerCash(drawerCash)
+      if (drawerCash !== null) {
+        setOpeningBalanceValue((prev) => {
+          if (!prev || prev === '0') return drawerCash > 0 ? String(drawerCash) : ''
+          return prev
+        })
+      }
       setTodayStatus(status)
       setReport(rpt)
+      setCloseError(drawerResult.ok ? '' : `تم تحميل الوردية، لكن تعذر قراءة رصيد الدرج: ${cleanError(drawerResult.error)}`)
+      return true
     } catch (error) {
-      console.error('DayClosing loadData failed:', error)
-      setTodayStatus(null)
-      setReport(null)
+      if (seq !== loadSeq.current) return false
+      const message = cleanError(error, 'تعذر تحميل بيانات الوردية')
+      setCloseError(message)
+      if (notify) window.alert(message)
+      return false
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
-  }, [todayStr])
+  }, [todayStr, user?.id])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    loadData()
+    return () => { loadSeq.current += 1 }
+  }, [loadData])
 
   const resolvePrintSettings = useCallback(async () => {
     try {
@@ -131,129 +184,245 @@ export default function DayClosingPage({ user, settings, setPage }) {
     }
   }, [settings])
 
-  const isNoShift = !todayStatus || startNewShift  // no record at all today or explicitly starting a new one
-  const isOpen   = todayStatus?.status === 'open' && !startNewShift
+  const printClosing = async (closing) => {
+    if (printRef.current) return
+    printRef.current = true
+    setPrintBusy(true)
+    setCloseError('')
+    try {
+      if (!closing) throw new Error('لا يوجد إقفال صالح للطباعة')
+      const printSettings = await resolvePrintSettings()
+      const html = generateClosingHTML(closing, printSettings)
+      await window.mgpos.print(html, {
+        paperSize: printSettings?.paper_size || '80mm',
+        printerName: printSettings?.printer_name || undefined,
+        documentType: 'receipt',
+        title: 'معاينة تقرير الإقفال',
+      })
+    } catch (error) {
+      setCloseError(cleanError(error, 'تعذرت طباعة تقرير الإقفال'))
+    } finally {
+      printRef.current = false
+      setPrintBusy(false)
+    }
+  }
+
+  const handlePrintSavedClosing = async () => {
+    if (!todayStatus?.id || printRef.current) return
+    printRef.current = true
+    setPrintBusy(true)
+    setCloseError('')
+    try {
+      const closing = await window.mgpos.db.getClosingById(todayStatus.id)
+      if (!closing) throw new Error('الإقفال المحفوظ غير موجود')
+      const printSettings = await resolvePrintSettings()
+      await window.mgpos.print(generateClosingHTML(closing, printSettings), {
+        paperSize: printSettings?.paper_size || '80mm',
+        printerName: printSettings?.printer_name || undefined,
+        documentType: 'receipt',
+        title: 'معاينة تقرير الإقفال',
+      })
+    } catch (error) {
+      setCloseError(cleanError(error, 'تعذر قراءة الإقفال المحفوظ للطباعة'))
+    } finally {
+      printRef.current = false
+      setPrintBusy(false)
+    }
+  }
+
+  const handlePrintPreview = async () => {
+    const actual = parseMoneyInput(actualCash, { blankAsZero: true }) ?? 0
+    const expected = Number(report?.expected_cash || 0) + Number(todayStatus?.opening_balance || 0)
+    await printClosing({
+      ...report,
+      date: todayStr,
+      shift_opened_at: shiftStart,
+      shift_closed_at: new Date().toISOString(),
+      closed_by_name: user?.username,
+      opening_balance: todayStatus?.opening_balance || 0,
+      expected_cash: expected,
+      actual_cash: actual,
+      difference: actual - expected,
+    })
+  }
+
+  const isNoShift = !todayStatus || startNewShift
   const isClosed = todayStatus?.status === 'closed' && !startNewShift
-  const cashierCanOpenShift =
-    canOpenShiftPermission ||
-    settings?.cashier_can_open_shift === undefined ||
-    settings?.cashier_can_open_shift === '1' ||
-    settings?.cashier_can_open_shift === true
+  const cashierSettingAllowsOpen = settings?.cashier_can_open_shift === undefined || settings?.cashier_can_open_shift === '1' || settings?.cashier_can_open_shift === 'true' || settings?.cashier_can_open_shift === true
+  const cashierCanOpenShift = canOpenShiftPermission && (user?.role !== 'cashier' || cashierSettingAllowsOpen)
 
   async function handleOpenShift() {
-    const bal = parseFloat(openingBalanceValue) || 0;
-    if (bal < 0) {
-      setCloseError('لا يمكن إدخال رصيد افتتاحي بالسالب');
-      return;
+    if (openingRef.current || !cashierCanOpenShift) return
+    const bal = parseMoneyInput(openingBalanceValue, { blankAsZero: true })
+    if (bal === null) {
+      setCloseError('الرصيد الافتتاحي لازم يكون رقمًا غير سالب بحد أقصى منزلتين عشريتين')
+      return
     }
+    openingRef.current = true
     setOpening(true)
+    setCloseError('')
     try {
       const record = await window.mgpos.db.openShift(user?.id, bal)
-      const [freshStatus, freshReport] = await Promise.all([
-        window.mgpos.db.getTodayClosingStatus().catch(() => null),
-        window.mgpos.db.buildDayReport(todayStr).catch(() => null),
-      ])
-      const nextStatus = freshStatus?.status === 'open'
-        ? freshStatus
-        : { ...record, status: record?.status || 'open', opened_by_name: record?.opened_by_name || user?.username }
       setStartNewShift(false)
       setOpeningBalanceValue('')
       setActualCash('')
       setNotes('')
-      setTodayStatus(nextStatus)
-      setReport(freshReport)
+      setTodayStatus({ ...record, status: record?.status || 'open', opened_by_name: record?.opened_by_name || user?.username })
+      await loadData({ notify: false })
       window.dispatchEvent(new Event('mgpos:refresh-cashier-topbar'))
-    } catch (e) {
-      console.error(e)
+    } catch (error) {
+      setCloseError(cleanError(error, 'تعذر فتح الوردية'))
     } finally {
+      openingRef.current = false
       setOpening(false)
     }
   }
 
+  const getUnresolvedInvoicesCount = async () => {
+    const openInvoicesWithItems = (usePosStore.getState().invoices || []).filter(
+      (inv) => Array.isArray(inv.cart) && inv.cart.length > 0
+    )
+    let heldCount = 0
+    try {
+      const storedHeld = JSON.parse(localStorage.getItem('cashier_held_invoices') || '[]')
+      if (Array.isArray(storedHeld)) {
+        heldCount = storedHeld.filter(inv => Array.isArray(inv?.cart) && inv.cart.length > 0).length
+      }
+    } catch (_) {}
+
+    if (!window.mgpos?.db?.getDrafts || !user?.id) throw new Error('تعذر التحقق من مسودات الفواتير قبل الإقفال')
+    let sqliteDraftCount = 0
+    try {
+      const userDrafts = await window.mgpos.db.getDrafts(user.id)
+      if (!Array.isArray(userDrafts)) throw new Error('رد مسودات الفواتير غير صالح')
+      sqliteDraftCount = userDrafts.filter(d => Array.isArray(d.cart) && d.cart.length > 0).length
+    } catch (error) {
+      throw new Error(`تعذر التحقق من مسودات الفواتير قبل الإقفال: ${cleanError(error)}`)
+    }
+
+    const activeCount = openInvoicesWithItems.length
+    const extraDrafts = Math.max(0, sqliteDraftCount - activeCount)
+    const total = activeCount + heldCount + extraDrafts
+    return {
+      total,
+      active: activeCount,
+      held: heldCount,
+      drafts: sqliteDraftCount,
+    }
+  }
+
+  const handleRequestNewShift = async () => {
+    if (newShiftRef.current || !cashierCanOpenShift) return
+    newShiftRef.current = true
+    setStartingNewShift(true)
+    setCloseError('')
+    try {
+      const bal = Number(await window.mgpos?.treasury?.getCurrentDrawerBalance?.(user?.id) || 0)
+      setDetectedDrawerCash(Number.isFinite(bal) ? bal : null)
+      setOpeningBalanceValue(Number.isFinite(bal) && bal > 0 ? String(bal) : '')
+      setStartNewShift(true)
+    } catch (error) {
+      setCloseError(cleanError(error, 'تعذر قراءة رصيد الدرج لفتح وردية جديدة'))
+    } finally {
+      newShiftRef.current = false
+      setStartingNewShift(false)
+    }
+  }
+
   async function handleClose() {
+    if (preparingCloseRef.current || closingRef.current) return
     if (!canCloseShiftPermission) {
       setCloseError('غير مسموح لك بإقفال الوردية')
       return
     }
-    if (!actualCash && actualCash !== '0') {
-      setCloseError('يرجى إدخال الكاش الفعلي الموجود في الخزنة')
-      return
-    }
-
-    const expected = (report?.expected_cash || 0) + (todayStatus?.opening_balance || 0)
-    const actual = parseFloat(actualCash) || 0
-    const diff = actual - expected
-
-    // Deficit settings check
-    if (diff < 0) {
-      const allowDeficit = settings?.allow_closing_deficit === '1' || settings?.allow_closing_deficit === 'true' || settings?.allow_closing_deficit === true
-      const limit = parseFloat(settings?.allowed_deficit_limit) || 0
-
-      if (!allowDeficit && !canReopenPermission) {
-        setCloseError('الإعدادات: غير مسموح بالكاشير إقفال اليومية في حالة وجود عجز في الخزنة!')
+    preparingCloseRef.current = true
+    setPreparingClose(true)
+    setCloseError('')
+    try {
+      const unresolved = await getUnresolvedInvoicesCount()
+      if (unresolved.total > 0) {
+        setCloseError(`عفواً، لا يمكن إقفال الوردية لوجود فواتير مبيعات مفتوحة أو معلقة تحتوي على منتجات (${unresolved.total} فاتورة: ${unresolved.active} نشطة، ${unresolved.held} معلقة، ${unresolved.drafts} مسودات). يرجى إتمامها أو إلغاؤها من شاشة المبيعات أولاً.`)
         return
       }
 
-      if (allowDeficit && Math.abs(diff) > limit && !canReopenPermission) {
-        setCloseError(`عفواً، لا يمكن إقفال اليومية. العجز (${fmt(Math.abs(diff))}) يتجاوز الحد المسموح به لكاشير (${fmt(limit)}).`)
+      const actual = parseMoneyInput(actualCash)
+      if (actual === null) {
+        setCloseError('الكاش الفعلي لازم يكون رقمًا غير سالب بحد أقصى منزلتين عشريتين')
         return
       }
-    }
+      if (notes.length > 2000) {
+        setCloseError('الملاحظات طويلة جدًا (الحد الأقصى 2000 حرف)')
+        return
+      }
 
-    setConfirming(true)
+      const expected = Number(report?.expected_cash || 0) + Number(todayStatus?.opening_balance || 0)
+      const diff = actual - expected
+      if (diff < 0) {
+        const allowDeficit = settings?.allow_closing_deficit === '1' || settings?.allow_closing_deficit === 'true' || settings?.allow_closing_deficit === true
+        const limit = parseMoneyInput(settings?.allowed_deficit_limit, { blankAsZero: true }) ?? 0
+        if (!allowDeficit && !canReopenPermission) {
+          setCloseError('الإعدادات: غير مسموح بالكاشير إقفال اليومية في حالة وجود عجز في الخزنة!')
+          return
+        }
+        if (allowDeficit && Math.abs(diff) > limit && !canReopenPermission) {
+          setCloseError(`عفواً، لا يمكن إقفال اليومية. العجز (${fmt(Math.abs(diff))}) يتجاوز الحد المسموح به لكاشير (${fmt(limit)}).`)
+          return
+        }
+      }
+      setConfirming(true)
+    } catch (error) {
+      setCloseError(cleanError(error, 'تعذر التحقق من جاهزية الوردية للإقفال'))
+    } finally {
+      preparingCloseRef.current = false
+      setPreparingClose(false)
+    }
   }
 
   async function confirmClose() {
-    const expected = (report?.expected_cash || 0) + (todayStatus?.opening_balance || 0)
-    const actual = parseFloat(actualCash) || 0
-    const diff = actual - expected
-    const now = new Date().toISOString()
-    const startTime = todayStatus?.shift_opened_at || now
-    const durationMs = new Date(now) - new Date(startTime.includes(' ') && !startTime.includes('Z') ? startTime.replace(' ', 'T') + 'Z' : startTime)
-    const durationMin = Math.round(durationMs / 60000)
+    if (closingRef.current) return
+    closingRef.current = true
+    setClosingBusy(true)
+    try {
+      await runConfirmClose()
+    } catch (err) {
+      setCloseError(String(err?.message || '').replace(/^Error invoking remote method '[^']+': (Error: )?/, '') || 'تعذّر إقفال الوردية')
+      setConfirming(false)
+    } finally {
+      closingRef.current = false
+      setClosingBusy(false)
+    }
+  }
 
-    const data = {
-      date: todayStr,
-      shift_opened_at: startTime,
-      shift_closed_at: now,
-      shift_duration_minutes: durationMin,
-      opened_by_user_id: todayStatus?.opened_by_user_id || user?.id,
-      closed_by_user_id: user?.id,
-      opening_balance: todayStatus?.opening_balance || 0,
-      cash_sales: report?.cash_sales || 0,
-      card_sales: report?.card_sales || 0,
-      credit_sales: report?.credit_sales || 0,
-      discount_total: report?.discount_total || 0,
-      returns_total: report?.returns_total || 0,
-      returns_count: report?.returns_count || 0,
-      expenses_total: report?.expenses_total || 0,
-      expenses_count: report?.expenses_count || 0,
-      invoices_count: report?.invoices_count || 0,
-      items_count: report?.items_count || 0,
-      customers_count: report?.customers_count || 0,
-      new_customers_count: report?.new_customers_count || 0,
-      credit_customers_count: report?.credit_customers_count || 0,
-      credit_amount: report?.credit_amount || 0,
-      total_sales: report?.total_sales || 0,
-      net_sales: report?.net_sales || 0,
-      avg_invoice: report?.avg_invoice || 0,
-      top_product_name: report?.top_product_name || '—',
-      least_product_name: report?.least_product_name || '—',
-      expected_cash: expected,
+  async function runConfirmClose() {
+    const unresolved = await getUnresolvedInvoicesCount()
+    if (unresolved.total > 0) {
+      setCloseError(`عفواً، لا يمكن إقفال الوردية لوجود فواتير مبيعات مفتوحة أو معلقة (${unresolved.total} فاتورة).`)
+      setConfirming(false)
+      return
+    }
+    if (!todayStatus?.id || !['open', 'reopened'].includes(todayStatus?.status)) throw new Error('الوردية لم تعد مفتوحة، حدّث الصفحة وحاول مرة أخرى')
+    const actual = parseMoneyInput(actualCash)
+    if (actual === null) throw new Error('الكاش الفعلي لازم يكون رقمًا غير سالب بحد أقصى منزلتين عشريتين')
+
+    const savedClosing = await window.mgpos.db.createClosing({
+      _updateId: todayStatus.id,
       actual_cash: actual,
-      difference: diff,
-      notes: notes,
-      status: 'closed',
-    }
-
-    // Update the existing open record instead of inserting new one
-    if (todayStatus?.id) {
-      await window.mgpos.db.createClosing({ ...data, _updateId: todayStatus.id })
-    } else {
-      await window.mgpos.db.createClosing(data)
-    }
+      notes: notes.trim(),
+    })
+    setTodayStatus(savedClosing)
     setConfirming(false)
-    await loadData()
+
+    const followUpErrors = []
+    if (window.mgpos?.backup?.checkAndRun) {
+      try {
+        await window.mgpos.backup.checkAndRun({ trigger: 'day_closing' })
+      } catch (error) {
+        followUpErrors.push(`النسخة الاحتياطية: ${cleanError(error)}`)
+      }
+    }
+    const refreshed = await loadData({ notify: false })
+    if (!refreshed) followUpErrors.push('تعذر تحديث الشاشة من قاعدة البيانات')
+    setCloseError(followUpErrors.length > 0 ? `تم حفظ الإقفال بنجاح، لكن ${followUpErrors.join('، ')}` : '')
     window.dispatchEvent(new Event('mgpos:refresh-cashier-topbar'))
   }
 
@@ -292,55 +461,120 @@ export default function DayClosingPage({ user, settings, setPage }) {
     }
 
     return (
-      <div className="flex items-center justify-center h-full bg-slate-100" dir="rtl">
-        <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-12 max-w-md w-full text-center"
-          style={{ animation: 'popIn .25s ease-out' }}>
-          <div className="w-24 h-24 rounded-3xl bg-emerald-50 text-emerald-800 mx-auto flex items-center justify-center mb-6 shadow-inner">
-            <Play size={48} />
-          </div>
-          <h2 className="text-2xl font-black text-slate-800 mb-2">لم يتم فتح ورديتك بعد</h2>
-          <p className="text-slate-400 font-bold mb-6">تاريخ اليوم: <span className="text-slate-700">{fmtDate(todayStr)}</span></p>
+      <div className="flex items-center justify-center min-h-[calc(100vh-120px)] bg-slate-100/60 p-4" dir="rtl">
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-200/80 p-8 sm:p-10 max-w-lg w-full text-center relative overflow-hidden animate-fadeIn">
+          {/* Subtle decoration */}
+          <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-50 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl pointer-events-none" />
 
-          <div className="bg-emerald-50/40 p-6 rounded-[2rem] border border-emerald-100 mb-8 text-right relative group shadow-sm transition-all hover:shadow-md hover:bg-emerald-50/60">
-            <label className="flex items-center gap-2 text-[13px] font-black text-emerald-800 mb-3 uppercase tracking-widest px-1">
-              <Wallet size={16} /> رصيد أول اليوم (بالدرج الآن)
+          {/* User identity badge */}
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-600 mb-6">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>المستخدم الحالي:</span>
+            <span data-no-translate className="font-black text-slate-900">{user?.username}</span>
+            <span className="text-slate-400">({user?.role === 'admin' ? 'مدير النظام' : 'كاشير'})</span>
+          </div>
+
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-800 mx-auto flex items-center justify-center mb-4 border border-emerald-100 shadow-2xs">
+            <Play size={28} />
+          </div>
+          <h2 className="text-2xl font-black text-slate-800 mb-1.5">لم يتم فتح ورديتك بعد</h2>
+          <p className="text-xs text-slate-500 font-bold mb-6">
+            تاريخ اليوم: <span className="text-slate-800 font-mono font-black">{fmtDate(todayStr)}</span>
+          </p>
+
+          <div className="bg-emerald-50/40 p-5 rounded-2xl border border-emerald-100/80 mb-6 text-right shadow-2xs">
+            <label htmlFor="day-closing-opening-balance" className="flex items-center gap-2 text-xs font-black text-emerald-900 mb-2.5 px-0.5">
+              <Wallet size={15} />
+              <span>رصيد الافتتاح بالدرج (فكة أول الوردية)</span>
             </label>
-            <div className="relative flex items-center">
+
+            {detectedDrawerCash !== null && detectedDrawerCash > 0 && (
+              <div className="flex items-center justify-between gap-2 bg-emerald-100/80 border border-emerald-300 text-emerald-900 rounded-xl px-3 py-2 mb-3 text-xs font-black shadow-2xs">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Sparkles size={15} className="text-emerald-700 shrink-0 animate-pulse" />
+                  <span className="truncate">
+                    النقدية المتواجدة بالدرج حالياً: <span className="font-mono text-sm underline">{fmt(detectedDrawerCash)} {currency}</span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpeningBalanceValue(String(detectedDrawerCash))
+                    setCloseError('')
+                  }}
+                  className="shrink-0 px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-black transition cursor-pointer shadow-2xs"
+                >
+                  تطبيق تلقائي
+                </button>
+              </div>
+            )}
+
+            <div className="relative flex items-center mb-3">
               <input
-                type="number"
+                id="day-closing-opening-balance"
+                type="text"
+                inputMode="decimal"
                 min="0"
                 value={openingBalanceValue}
                 onChange={e => {
-                  setOpeningBalanceValue(e.target.value);
-                  setCloseError('');
+                  setOpeningBalanceValue(e.target.value)
+                  setCloseError('')
                 }}
-                placeholder="0"
-                className="w-full bg-white border-2 border-emerald-200 rounded-2xl px-5 py-4 text-2xl font-black text-emerald-900 outline-none transition shadow-inner [&::-webkit-inner-spin-button]:appearance-none [appearance:textfield] focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/20 cursor-text"
+                placeholder="0.00"
+                className="w-full bg-white border-2 border-emerald-200 rounded-xl px-4 py-3 text-2xl font-black font-mono text-emerald-950 outline-none transition shadow-2xs focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
                 style={{ paddingLeft: '4.5rem' }}
               />
-              <div className="absolute left-3 px-4 py-2 bg-emerald-100 text-emerald-800 rounded-xl text-sm font-black tracking-widest pointer-events-none select-none">
+              <div className="absolute left-2.5 px-3 py-1.5 bg-emerald-100 text-emerald-900 rounded-lg text-xs font-black tracking-wider pointer-events-none select-none">
                 {currency}
               </div>
             </div>
+
+            {/* Quick preset buttons */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-slate-400 font-bold ml-1">تحديد سريع:</span>
+              {[
+                ...(detectedDrawerCash > 0 ? [{ label: `رصيد الدرج (${fmt(detectedDrawerCash)})`, val: String(detectedDrawerCash) }] : []),
+                { label: '0 (فارغ)', val: '0' },
+                { label: '50', val: '50' },
+                { label: '100', val: '100' },
+                { label: '200', val: '200' },
+                { label: '500', val: '500' },
+              ].map(preset => (
+                <button
+                  key={preset.val}
+                  type="button"
+                  onClick={() => { setOpeningBalanceValue(preset.val); setCloseError('') }}
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-emerald-100 text-slate-600 hover:text-emerald-900 border border-slate-200/80 text-[10px] font-black transition cursor-pointer"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <p className="text-slate-400 text-sm font-medium mb-8">اضغط على زر "فتح اليوم" لبدء ورديتك الخاصة. سيتم تسجيل وقت البدء ورصيد الافتتاح لهذا المستخدم فقط.</p>
+          <p className="text-slate-400 text-xs font-medium mb-6">
+            اضغط على زر "بدء وفتح الوردية" لتسجيل وقت الحضور ورصيد الافتتاح الخاص بك والبدء في تسجيل المبيعات.
+          </p>
+
           {closeError && (
-            <div className="flex items-center gap-2 rounded-2xl bg-red-50 px-5 py-4 text-sm font-black text-red-600 border border-red-100 mb-2">
-              <AlertTriangle size={16} />
-              {closeError}
+            <div className="flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-3 text-xs font-black text-rose-700 border border-rose-100 mb-4">
+              <AlertTriangle size={15} />
+              <span>{closeError}</span>
             </div>
           )}
+
           <button
             onClick={handleOpenShift}
             disabled={opening}
-            className="w-full bg-gradient-to-r from-emerald-800 to-emerald-600 hover:from-emerald-900 hover:to-emerald-700 disabled:opacity-60 text-white py-5 rounded-2xl font-black text-xl shadow-xl shadow-emerald-700/30 hover:shadow-2xl transition-all flex items-center justify-center gap-3"
+            className="w-full bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white py-3.5 rounded-xl font-black text-base shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer"
           >
-            {opening ? <><RefreshCw size={22} className="animate-spin" /> جاري الفتح...</> : <><Play size={22} /> فتح اليوم</>}
+            {opening ? (
+              <><RefreshCw size={18} className="animate-spin" /> <span>جارٍ فتح الوردية...</span></>
+            ) : (
+              <><Play size={18} /> <span>بدء وفتح الوردية</span></>
+            )}
           </button>
-          <p className="text-xs text-slate-400 mt-4 font-medium">بواسطة: <span className="font-black text-slate-600">{user?.username}</span></p>
         </div>
-        <style>{`@keyframes popIn { from { opacity:0; transform:scale(0.92); } to { opacity:1; transform:scale(1); } }`}</style>
       </div>
     )
   }
@@ -350,38 +584,39 @@ export default function DayClosingPage({ user, settings, setPage }) {
   ;(report?.paymentCounts || []).forEach(p => { paymentCountMap[p.payment_method] = p.cnt })
 
   const expectedCash = (report?.expected_cash || 0) + (todayStatus?.opening_balance || 0)
-  const actualVal = parseFloat(actualCash) || 0
+  const actualVal = parseMoneyInput(actualCash, { blankAsZero: true }) ?? 0
   const difference = actualVal - expectedCash
   const diffLabel = difference === 0 ? 'متطابق' : difference > 0 ? 'زيادة' : 'عجز'
-  const diffColor = difference === 0 ? 'text-green-600 bg-green-50 border-green-100' : difference > 0 ? 'text-amber-600 bg-amber-50 border-amber-100' : 'text-red-600 bg-red-50 border-red-100'
 
   return (
     <div className="p-6 h-full overflow-auto bg-slate-100 space-y-6" dir="rtl">
 
       {/* ═══ HEADER ═══ */}
-      <div className="bg-gradient-to-br from-emerald-900 via-emerald-800 to-emerald-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl" />
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-5">
-            <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center border border-white/20 shadow-lg">
-              {isClosed ? <ShieldCheck size={32} /> : <Play size={32} />}
+      <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-emerald-900 rounded-2xl p-6 text-white shadow-sm relative overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center border border-white/15 shadow-inner">
+              {isClosed ? <ShieldCheck size={26} /> : <Play size={26} />}
             </div>
             <div>
-              <h1 className="text-2xl font-black">فتح وإقفال اليوم</h1>
-              <p className="text-emerald-200 text-sm font-bold mt-1">
-                <CalendarDays size={14} className="inline ml-1" />
+              <h1 className="text-xl sm:text-2xl font-black">فتح وإقفال اليوم</h1>
+              <p className="text-emerald-200 text-xs font-bold mt-0.5">
+                <CalendarDays size={13} className="inline ml-1 opacity-80" />
                 {fmtDate(todayStr)}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className={`px-5 py-2.5 rounded-2xl font-black text-sm border ${isClosed ? 'bg-green-500/20 text-green-300 border-green-400/30' : 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30'}`}>
-              {isClosed ? '🔒 ورديتك مقفولة' : '🟢 ورديتك مفتوحة'}
+          <div className="flex items-center gap-3">
+            <div className={`px-3.5 py-1.5 rounded-xl font-black text-xs border ${
+              isClosed
+                ? 'bg-slate-100/20 text-slate-200 border-white/20'
+                : 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30'
+            }`}>
+              {isClosed ? '🔒 الوردية مقفولة' : '🟢 الوردية نشطة ومفتوحة'}
             </div>
-            <div className="bg-white/10 rounded-2xl px-4 py-2.5 border border-white/10">
-              <p className="text-emerald-200 text-[10px] font-black uppercase">المستخدم</p>
-              <p className="font-black text-sm">{user?.username}</p>
-              <p className="text-emerald-300 text-[10px]">{user?.role === 'admin' ? 'مدير النظام' : 'كاشير'}</p>
+            <div className="bg-white/10 rounded-xl px-3.5 py-1.5 border border-white/10 text-right">
+              <p className="text-emerald-200 text-[9px] font-black uppercase">المستخدم</p>
+              <p data-no-translate className="font-black text-xs">{user?.username}</p>
             </div>
           </div>
         </div>
@@ -389,32 +624,24 @@ export default function DayClosingPage({ user, settings, setPage }) {
 
       {/* Show closed message if already closed */}
       {isClosed ? (
-        <div className="bg-white rounded-[2.5rem] p-12 shadow-xl border border-green-100 text-center">
-          <div className="w-20 h-20 rounded-3xl bg-green-100 text-green-600 mx-auto flex items-center justify-center mb-6">
-            <CheckCircle size={42} />
+        <div className="bg-white rounded-2xl p-8 sm:p-12 shadow-2xs border border-emerald-200/80 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center mb-4">
+            <CheckCircle size={36} />
           </div>
-          <h3 className="text-2xl font-black text-slate-800 mb-3">تم إقفال هذا اليوم بالفعل</h3>
-          <p className="text-slate-400 font-bold mb-2">
+          <h3 className="text-xl font-black text-slate-800 mb-2">تم إقفال هذا اليوم بالفعل</h3>
+          <p className="text-slate-400 text-xs font-bold mb-1">
             تم الإقفال بواسطة:{' '}
-            <span className="text-slate-700">
+            <span data-no-translate className="text-slate-700">
               {todayStatus?.closed_by_name || (todayStatus?.closed_by_user_id === user?.id ? user?.username : `User #${todayStatus?.closed_by_user_id}`)}
             </span>
           </p>
-          <p className="text-slate-400 font-bold mb-6">وقت الإقفال: <span className="text-slate-700">{fmtTime(todayStatus?.shift_closed_at)}</span></p>
-          <div className="flex items-center justify-center gap-4">
-            <button 
-              onClick={async () => {
-                try {
-                  const closing = await window.mgpos.db.getTodayClosingStatus();
-                  if (closing) {
-                     const printSettings = await resolvePrintSettings()
-                     const html = generateClosingHTML(closing, printSettings);
-                     await window.mgpos.print(html, { silent: printSettings?.auto_print === '1' });
-                  }
-                } catch(e) {}
-              }}
-              className="flex items-center gap-2 bg-emerald-800 hover:bg-emerald-900 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-lg transition">
-              <Printer size={16} /> طباعة التقرير
+          <p className="text-slate-400 text-xs font-bold mb-6">وقت الإقفال: <span className="text-slate-700 font-mono">{fmtTime(todayStatus?.shift_closed_at)}</span></p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={handlePrintSavedClosing}
+              disabled={printBusy}
+              className="flex items-center gap-2 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white px-5 py-2.5 rounded-xl font-black text-xs shadow-xs transition cursor-pointer">
+              <Printer size={15} /> طباعة التقرير
             </button>
             {canViewPage(user, 'reports') && (
               <button 
@@ -422,95 +649,136 @@ export default function DayClosingPage({ user, settings, setPage }) {
                   localStorage.setItem('openReportTab', 'closings');
                   if (setPage) setPage('reports');
                 }}
-                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-2xl font-black text-sm transition"
+                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-black text-xs transition cursor-pointer"
               >
-                <Eye size={16} /> عرض سجل الإقفالات
+                <Eye size={15} /> عرض سجل الإقفالات
               </button>
             )}
-            <button 
-              onClick={() => setStartNewShift(true)}
-              className="flex items-center gap-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-6 py-3 rounded-2xl font-black text-sm transition"
+            <button
+              onClick={handleRequestNewShift}
+              disabled={!cashierCanOpenShift || opening || startingNewShift}
+              className="flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60 text-emerald-800 border border-emerald-200 px-5 py-2.5 rounded-xl font-black text-xs transition cursor-pointer"
             >
-              <Play size={16} /> فتح وردية جديدة
+              <Play size={15} /> فتح وردية جديدة
             </button>
           </div>
         </div>
       ) : (
         <>
-          <Section title="معلومات الوردية" icon={Clock3} iconColor="bg-violet-600">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <Play size={14} className="text-green-600" />
-                  <span className="text-[10px] font-black text-slate-400 uppercase">وقت فتح الوردية</span>
+          {/* ═══ SECTION 1: معلومات الوردية ═══ */}
+          <Section title="معلومات الوردية" icon={Clock3} iconColor="bg-emerald-800" subtitle="بيانات الحضور وبدء التشغيل">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {/* وقت الفتح */}
+              <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-black text-slate-400 uppercase">وقت بدء الوردية</span>
+                  <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center">
+                    <Play size={12} />
+                  </div>
                 </div>
-                <p className="font-black text-green-800">{fmtTime(shiftStart)}</p>
-                <p className="text-[10px] text-green-600 font-bold mt-1">{fmtDate(shiftStart)}</p>
+                <p className="font-black text-slate-900 font-mono text-sm">{fmtTime(shiftStart)}</p>
+                <p className="text-[10px] text-slate-400 font-bold mt-0.5">{fmtDate(shiftStart)}</p>
               </div>
-              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <Square size={14} className="text-red-500" />
-                  <span className="text-[10px] font-black text-slate-400 uppercase">وقت قفل الوردية</span>
+
+              {/* مدة الوردية */}
+              <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-black text-slate-400 uppercase">مدة العمل</span>
+                  <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center">
+                    <Timer size={12} />
+                  </div>
                 </div>
-                {isClosed
-                  ? <p className="font-black text-red-700">{fmtTime(todayStatus?.shift_closed_at)}</p>
-                  : <p className="font-black text-slate-400">لم يتم بعد</p>
-                }
+                {isClosed ? (
+                  <p className="font-black text-slate-900 font-mono text-sm">{todayStatus?.shift_duration_minutes || 0} دقيقة</p>
+                ) : (
+                  <LiveTimer startTime={shiftStart} />
+                )}
+                <p className="text-[10px] text-slate-400 font-bold mt-0.5">{isClosed ? 'إجمالي المدة' : 'عداد مباشر'}</p>
               </div>
-              <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <Timer size={14} className="text-emerald-600" />
-                  <span className="text-[10px] font-black text-slate-400 uppercase">مدة الوردية</span>
+
+              {/* رصيد الافتتاح (أو وقت القفل إذا كانت مقفولة) */}
+              {isClosed ? (
+                <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-2xs">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-black text-slate-400 uppercase">وقت قفل الوردية</span>
+                    <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center">
+                      <Square size={12} />
+                    </div>
+                  </div>
+                  <p className="font-black text-slate-900 font-mono text-sm">{fmtTime(todayStatus?.shift_closed_at)}</p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-0.5">وقت انتهاء الجرد</p>
                 </div>
-                {isClosed
-                  ? <p className="font-black text-emerald-700">{todayStatus?.shift_duration_minutes || 0} دقيقة</p>
-                  : <LiveTimer startTime={shiftStart} />
-                }
-              </div>
-              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <User size={14} className="text-violet-600" />
-                  <span className="text-[10px] font-black text-slate-400 uppercase">فتح بواسطة</span>
+              ) : (
+                <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-2xs">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-black text-slate-400 uppercase">رصيد الافتتاح بالدرج</span>
+                    <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center">
+                      <Wallet size={12} />
+                    </div>
+                  </div>
+                  <p className="font-black text-slate-900 font-mono text-sm" dir="ltr" style={{ textAlign: 'right' }}>
+                    {fmt(todayStatus?.opening_balance || 0)} <span className="text-xs font-bold text-slate-400">{currency}</span>
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-0.5">فكة أول الوردية</p>
                 </div>
-                <p className="font-black text-slate-800">{todayStatus?.opened_by_name || 'غير معروف'}</p>
+              )}
+
+              {/* الكاشير المسؤول */}
+              <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-black text-slate-400 uppercase">الكاشير المسؤول</span>
+                  <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center">
+                    <User size={12} />
+                  </div>
+                </div>
+                <p data-no-translate className="font-black text-slate-900 text-sm truncate">
+                  {todayStatus?.opened_by_name || user?.username || 'غير معروف'}
+                </p>
+                <p className="text-[10px] text-slate-400 font-bold mt-0.5">{user?.role === 'admin' ? 'مدير النظام' : 'كاشير'}</p>
               </div>
             </div>
           </Section>
 
           {/* ═══ SECTION 2: ملخص المبيعات ═══ */}
-          <Section title="ملخص المبيعات" icon={TrendingUp} iconColor="bg-emerald-800">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard icon={TrendingUp} label="إجمالي المبيعات" value={`${fmt(report?.total_sales)} ${currency}`} color="blue" />
-              <StatCard icon={Receipt} label="عدد الفواتير" value={report?.invoices_count || 0} color="violet" sub="فاتورة" />
-              <StatCard icon={Wallet} label="متوسط الفاتورة" value={`${fmt(report?.avg_invoice)} ${currency}`} color="green" />
-              <StatCard icon={Tags} label="صافي المبيعات" value={`${fmt(report?.net_sales)} ${currency}`} color="blue" />
-              <StatCard icon={Tags} label="إجمالي الخصومات" value={`${fmt(report?.discount_total)} ${currency}`} color="amber" />
-              <StatCard icon={RotateCcw} label="إجمالي المرتجعات" value={`${fmt(report?.returns_total)} ${currency}`} color="red" sub={`${report?.returns_count || 0} عملية`} />
-              <StatCard icon={Boxes} label="المنتجات المباعة" value={report?.items_count || 0} color="slate" sub="عنصر" />
-              <StatCard icon={Receipt} label="عدد المرتجعات" value={report?.returns_count || 0} color="red" sub="عملية" />
+          <Section title="ملخص المبيعات" icon={TrendingUp} iconColor="bg-emerald-800" subtitle="حركة الفواتير والتحصيل المالي للفترة">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard icon={TrendingUp} label="إجمالي المبيعات" value={`${fmt(report?.total_sales)} ${currency}`} color="emerald" sub="قبل الخصومات" />
+              <StatCard icon={Wallet} label="صافي المبيعات" value={`${fmt(report?.net_sales)} ${currency}`} color="emerald" sub="المبيعات الفعلية" />
+              <StatCard icon={Tags} label="إجمالي الخصومات" value={`${fmt(report?.discount_total)} ${currency}`} color="amber" sub="خصومات ممنوحة" />
+              <StatCard icon={RotateCcw} label="إجمالي المرتجعات" value={`${fmt(report?.returns_total)} ${currency}`} color="red" sub={`${report?.returns_count || 0} عملية (كاش: ${fmt(report?.cash_returns_total || 0)} | آجل: ${fmt(report?.credit_returns_total || 0)})`} />
+              <StatCard icon={Receipt} label="عدد الفواتير" value={report?.invoices_count || 0} color="slate" sub="فاتورة صادرة" />
+              <StatCard icon={Calculator} label="متوسط الفاتورة" value={`${fmt(report?.avg_invoice)} ${currency}`} color="emerald" sub="معدل سلة الشراء" />
+              <StatCard icon={Boxes} label="المنتجات المباعة" value={report?.items_count || 0} color="slate" sub="صنف/قطعة" />
+              <StatCard icon={Users} label="العملاء المخدومين" value={report?.customers_count || 0} color="emerald" sub="عميل اليوم" />
             </div>
           </Section>
 
           {/* ═══ SECTION 3: طرق الدفع ═══ */}
-          <Section title="طرق الدفع" icon={CreditCard} iconColor="bg-green-700">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-green-50 rounded-2xl p-5 border border-green-100 text-center">
-                <Banknote size={28} className="mx-auto mb-3 text-green-600" />
-                <p className="text-[10px] font-black text-green-500 uppercase mb-1">نقد (كاش)</p>
-                <p className="text-2xl font-black text-green-800">{fmt(report?.cash_sales)} <span className="text-xs opacity-40">{currency}</span></p>
-                <p className="text-xs text-green-600 font-bold mt-1">{paymentCountMap.cash || 0} عملية</p>
+          <Section title="طرق الدفع والتحصيل" icon={CreditCard} iconColor="bg-emerald-800" subtitle="توزيع المبيعات حسب وسيلة الدفع">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs text-center">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center mx-auto mb-2.5">
+                  <Banknote size={20} />
+                </div>
+                <p className="text-[11px] font-black text-slate-500 uppercase mb-1">نقد (كاش)</p>
+                <p className="text-xl font-black text-slate-900 font-mono">{fmt(report?.cash_sales)} <span className="text-xs font-bold text-slate-400">{currency}</span></p>
+                <p className="text-xs text-emerald-700 font-bold mt-1">{paymentCountMap.cash || 0} عملية</p>
               </div>
-              <div className="bg-emerald-50 rounded-2xl p-5 border border-emerald-100 text-center">
-                <CreditCard size={28} className="mx-auto mb-3 text-emerald-600" />
-                <p className="text-[10px] font-black text-emerald-500 uppercase mb-1">بطاقة</p>
-                <p className="text-2xl font-black text-emerald-800">{fmt(report?.card_sales)} <span className="text-xs opacity-40">{currency}</span></p>
-                <p className="text-xs text-emerald-600 font-bold mt-1">{paymentCountMap.card || 0} عملية</p>
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs text-center">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center mx-auto mb-2.5">
+                  <CreditCard size={20} />
+                </div>
+                <p className="text-[11px] font-black text-slate-500 uppercase mb-1">بطاقة بنكية / إلكتروني</p>
+                <p className="text-xl font-black text-slate-900 font-mono">{fmt(report?.card_sales)} <span className="text-xs font-bold text-slate-400">{currency}</span></p>
+                <p className="text-xs text-emerald-700 font-bold mt-1">{paymentCountMap.card || 0} عملية</p>
               </div>
-              <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100 text-center">
-                <Clock3 size={28} className="mx-auto mb-3 text-orange-600" />
-                <p className="text-[10px] font-black text-orange-500 uppercase mb-1">آجل</p>
-                <p className="text-2xl font-black text-orange-800">{fmt(report?.credit_sales)} <span className="text-xs opacity-40">{currency}</span></p>
-                <p className="text-xs text-orange-600 font-bold mt-1">{paymentCountMap.credit || 0} عملية</p>
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs text-center">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 border border-amber-100 flex items-center justify-center mx-auto mb-2.5">
+                  <Clock3 size={20} />
+                </div>
+                <p className="text-[11px] font-black text-slate-500 uppercase mb-1">آجل (ذمم عملاء)</p>
+                <p className="text-xl font-black text-slate-900 font-mono">{fmt(report?.credit_sales)} <span className="text-xs font-bold text-slate-400">{currency}</span></p>
+                <p className="text-xs text-amber-700 font-bold mt-1">{paymentCountMap.credit || 0} عملية</p>
               </div>
             </div>
           </Section>
@@ -548,7 +816,7 @@ export default function DayClosingPage({ user, settings, setPage }) {
                   <tbody className="divide-y divide-slate-100">
                     {report.topProducts.map((p, i) => (
                       <tr key={i} className="hover:bg-white transition">
-                        <td className="px-4 py-2.5 font-bold text-slate-700">{p.name}</td>
+                        <td data-no-translate className="px-4 py-2.5 font-bold text-slate-700">{p.name}</td>
                         <td className="px-4 py-2.5 text-center font-bold text-slate-600">{p.qty}</td>
                         <td className="px-4 py-2.5 text-center font-black text-emerald-800">{fmt(p.total)} {currency}</td>
                       </tr>
@@ -569,44 +837,64 @@ export default function DayClosingPage({ user, settings, setPage }) {
           </Section>
 
           {/* ═══ SECTION 7: تسوية الخزنة ═══ */}
-          <div className="bg-white rounded-[2rem] p-8 shadow-xl border-2 border-emerald-200 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-56 h-56 bg-emerald-50 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl opacity-70 pointer-events-none" />
+          <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-2xs border-2 border-emerald-300 relative overflow-hidden">
             <div className="relative z-10">
-              <h3 className="font-black text-slate-800 text-xl mb-8 flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-300/40">
-                  <Calculator size={24} />
+              <div className="flex items-center justify-between gap-3 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-800 text-white flex items-center justify-center shadow-xs">
+                    <Calculator size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-900 text-lg leading-tight">تسوية وجرد الخزنة</h3>
+                    <p className="text-[11px] text-slate-500 font-bold mt-0.5">مطابقة النقدية الفعلية في الدرج مع الحركات المسجلة</p>
+                  </div>
                 </div>
-                تسوية الخزنة
-                <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-100 mr-auto">أهم قسم</span>
-              </h3>
+                <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
+                  قسم الجرد الإلزامي
+                </span>
+              </div>
 
               {/* Rows */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-center">
-                  <p className="text-[10px] font-black text-slate-400 uppercase mb-2">رصيد أول اليوم</p>
-                  <p className="text-xl font-black text-slate-700">{fmt(todayStatus?.opening_balance || 0)} <span className="text-xs opacity-30">{currency}</span></p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80 text-center">
+                  <p className="text-[10px] font-black text-slate-400 uppercase mb-1">رصيد أول اليوم</p>
+                  <p className="text-lg font-black text-slate-800 font-mono">{fmt(todayStatus?.opening_balance || 0)} <span className="text-xs text-slate-400">{currency}</span></p>
+                  <p className="text-[9px] text-slate-400 font-bold mt-0.5">عهدة نقدية أولية</p>
                 </div>
-                <div className="bg-green-50 rounded-2xl p-4 border border-green-100 text-center">
-                  <p className="text-[10px] font-black text-green-500 uppercase mb-2">الداخل كاش</p>
-                  <p className="text-xl font-black text-green-700">{fmt(report?.cash_sales)} <span className="text-xs opacity-30">{currency}</span></p>
+                <div className="bg-emerald-50/50 rounded-xl p-3.5 border border-emerald-200/60 text-center">
+                  <p className="text-[10px] font-black text-emerald-700 uppercase mb-1">المقبوضات كاش وتحصيل</p>
+                  <p className="text-lg font-black text-emerald-800 font-mono">+{fmt((report?.cash_sales || 0) + (report?.customer_payments_total || 0))} <span className="text-xs text-emerald-600">{currency}</span></p>
+                  <p className="text-[9px] text-emerald-600 font-bold mt-0.5">مبيعات ({fmt(report?.cash_sales || 0)}) + تحصيل ({fmt(report?.customer_payments_total || 0)})</p>
                 </div>
-                <div className="bg-red-50 rounded-2xl p-4 border border-red-100 text-center">
-                  <p className="text-[10px] font-black text-red-500 uppercase mb-2">المرتجعات + المصروفات</p>
-                  <p className="text-xl font-black text-red-600">{fmt((report?.returns_total || 0) + (report?.expenses_total || 0))} <span className="text-xs opacity-30">{currency}</span></p>
+                <div className="bg-rose-50/50 rounded-xl p-3.5 border border-rose-200/60 text-center">
+                  <p className="text-[10px] font-black text-rose-700 uppercase mb-1">المدفوعات النقدية (مصروفات + مرتجع كاش)</p>
+                  <p className="text-lg font-black text-rose-700 font-mono">-{fmt((report?.cash_returns_total || 0) + (report?.expenses_total || 0) + (report?.supplier_cash_payments_total || 0))} <span className="text-xs text-rose-500">{currency}</span></p>
+                  <p className="text-[9px] text-rose-500 font-bold mt-0.5">مرتجع كاش ({fmt(report?.cash_returns_total || 0)}) + مصاريف ({fmt((report?.expenses_total || 0) + (report?.supplier_cash_payments_total || 0))})</p>
                 </div>
-                <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-200 text-center">
-                  <p className="text-[10px] font-black text-emerald-500 uppercase mb-2">المتوقع في الخزنة</p>
-                  <p className="text-2xl font-black text-emerald-800">{fmt(expectedCash)} <span className="text-xs opacity-30">{currency}</span></p>
+                <div className="bg-emerald-100/60 rounded-xl p-3.5 border border-emerald-300 text-center">
+                  <p className="text-[10px] font-black text-emerald-800 uppercase mb-1">المتوقع في الخزنة</p>
+                  <p className="text-xl font-black text-emerald-950 font-mono">{fmt(expectedCash)} <span className="text-xs font-bold text-emerald-700">{currency}</span></p>
+                  <p className="text-[9px] text-emerald-800 font-bold mt-0.5">رصيد الإغلاق المحسوب</p>
                 </div>
               </div>
 
               {/* Input */}
-              <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 mb-6">
-                <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 block flex items-center gap-2">
-                  <CircleDollarSign size={14} className="text-emerald-600" />
-                  الكاش الفعلي الموجود في الخزنة ({currency})
-                </label>
+              <div className="bg-slate-50/80 rounded-2xl p-5 border border-slate-200/80 mb-5">
+                <div className="flex items-center justify-between gap-3 mb-2.5">
+                  <label htmlFor="day-closing-actual-cash" className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                    <CircleDollarSign size={15} className="text-emerald-700" />
+                    الكاش الفعلي الموجود في الخزنة الآن ({currency})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => { setActualCash(expectedCash.toFixed(2)); setCloseError('') }}
+                    className="text-[11px] font-black text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200/80 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                  >
+                    تطابق مع المتوقع ({fmt(expectedCash)})
+                  </button>
+                </div>
                 <input
+                  id="day-closing-actual-cash"
                   type="text"
                   inputMode="decimal"
                   value={actualCash}
@@ -619,78 +907,68 @@ export default function DayClosingPage({ user, settings, setPage }) {
                   }}
                   dir="ltr"
                   style={{ textAlign: 'right' }}
-                  placeholder="أدخل المبلغ الفعلي..."
-                  className="w-full bg-white border-2 border-emerald-200 rounded-2xl px-6 py-4 text-xl font-black text-slate-800 outline-none focus:border-emerald-500 transition shadow-sm"
+                  placeholder="0.00"
+                  className="w-full bg-white border-2 border-emerald-200 rounded-xl px-5 py-3 text-2xl font-black font-mono text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 transition shadow-2xs"
                 />
               </div>
 
-              {/* Difference */}
+              {/* Difference Banner */}
               {actualCash !== '' && (
-                <div className={`rounded-2xl p-6 border-2 text-center ${diffColor}`}>
-                  <p className="text-sm font-black uppercase mb-1">الفرق</p>
-                  <p className="text-3xl font-black">{fmt(Math.abs(difference))} {currency}</p>
-                  <p className="text-sm font-black mt-1">{diffLabel}</p>
+                <div className={`rounded-xl p-4 border text-center transition-all ${
+                  difference === 0
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : difference > 0
+                      ? 'bg-amber-50 border-amber-200 text-amber-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}>
+                  <p className="text-xs font-black uppercase mb-0.5">
+                    {difference === 0 ? '✓ النقدية متطابقة تماماً' : difference > 0 ? 'يوجد فائض في الخزنة' : 'يوجد عجز في الخزنة'}
+                  </p>
+                  <p className="text-2xl font-black font-mono">
+                    {difference === 0 ? '0.00' : `${difference > 0 ? '+' : '-'}${fmt(Math.abs(difference))}`} <span className="text-sm font-bold">{currency}</span>
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
           {/* ═══ SECTION 8: الملاحظات ═══ */}
-          <Section title="ملاحظات الإقفال" icon={FileText} iconColor="bg-slate-600">
+          <Section title="ملاحظات الإقفال" icon={FileText} iconColor="bg-slate-700" subtitle="اختياري - لتسجيل أي تفاصيل تشغيلية أو توضيح لفروق الدرج">
             <textarea
               value={notes}
+              maxLength={2000}
+              aria-label="ملاحظات الإقفال"
               onChange={e => setNotes(e.target.value)}
-              placeholder="يمكنك كتابة ملاحظات عن الوردية... مثلاً: تفسير فرق الخزنة، مشاكل تشغيلية، ملاحظات خاصة..."
-              rows={4}
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:border-emerald-400 transition resize-none"
+              placeholder="يمكنك كتابة أي ملاحظات عن الوردية... مثلاً: تفسير فرق الخزنة، مشاكل شبكة الدفع، ملاحظات خاصة..."
+              rows={3}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-emerald-500 transition resize-none"
             />
           </Section>
 
           {/* ═══ SECTION 9: الأزرار النهائية ═══ */}
           {closeError && (
-            <div className="flex items-center gap-2 rounded-2xl bg-red-50 px-5 py-4 text-sm font-black text-red-600 border border-red-100 mb-2">
-              <AlertTriangle size={16} />
-              {closeError}
+            <div className="flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-3 text-xs font-black text-rose-700 border border-rose-100">
+              <AlertTriangle size={15} />
+              <span>{closeError}</span>
             </div>
           )}
-          <div className="flex items-center gap-4 pb-6">
+
+          <div className="flex flex-wrap items-center gap-3 pb-6">
             <button
               onClick={handleClose}
-              className="flex-1 flex items-center justify-center gap-3 bg-gradient-to-r from-emerald-800 to-emerald-900 hover:from-emerald-900 hover:to-emerald-950 text-white py-4 rounded-2xl font-black text-lg shadow-xl hover:shadow-2xl transition-all hover:scale-[1.01]"
+              disabled={preparingClose || closingBusy || !canCloseShiftPermission}
+              className="flex-1 min-w-[200px] flex items-center justify-center gap-2.5 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white py-3.5 rounded-xl font-black text-sm shadow-xs hover:shadow-md transition cursor-pointer"
             >
-              <Lock size={22} /> تأكيد إقفال اليوم
+              <Lock size={16} />
+              <span>تأكيد إقفال الوردية واليوم</span>
             </button>
-            <button 
-              onClick={async () => {
-                 const diff = (parseFloat(actualCash) || 0) - (report?.expected_cash || 0);
-                 const closingObj = {
-                   date: new Date().toISOString().slice(0, 10),
-                   shift_opened_at: shiftStart,
-                   shift_closed_at: new Date().toISOString(),
-                   closed_by_name: user?.username,
-                   total_sales: report?.total_sales,
-                   net_sales: report?.net_sales,
-                   discount_total: report?.discount_total,
-                   returns_total: report?.returns_total,
-                   expenses_total: report?.expenses_total,
-                   cash_sales: report?.cash_sales,
-                   card_sales: report?.card_sales,
-                   credit_sales: report?.credit_sales,
-                   expected_cash: (report?.expected_cash || 0) + (todayStatus?.opening_balance || 0),
-                   actual_cash: parseFloat(actualCash) || 0,
-                   difference: (parseFloat(actualCash) || 0) - ((report?.expected_cash || 0) + (todayStatus?.opening_balance || 0)),
-                   invoices_count: report?.invoices_count,
-                   items_count: report?.items_count
-                 };
-                 const printSettings = await resolvePrintSettings()
-                 const html = generateClosingHTML(closingObj, printSettings);
-                 await window.mgpos.print(html, { silent: printSettings?.auto_print === '1' });
-              }}
-              className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 px-6 py-4 rounded-2xl font-black text-sm border border-slate-200 shadow-sm transition">
-              <Printer size={18} /> طباعة التقرير
-            </button>
-            <button className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 px-6 py-4 rounded-2xl font-black text-sm border border-slate-200 shadow-sm transition">
-              <Eye size={18} /> معاينة
+            <button
+              onClick={handlePrintPreview}
+              disabled={printBusy}
+              className="flex items-center gap-2 bg-white hover:bg-slate-50 disabled:opacity-60 text-slate-700 px-5 py-3.5 rounded-xl font-black text-xs border border-slate-200 shadow-2xs transition cursor-pointer"
+            >
+              <Printer size={15} />
+              <span>طباعة ملخص الإقفال</span>
             </button>
           </div>
         </>
@@ -699,7 +977,7 @@ export default function DayClosingPage({ user, settings, setPage }) {
       {/* ═══ Confirmation Modal ═══ */}
       {confirming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" dir="rtl">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setConfirming(false)} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { if (!closingBusy) setConfirming(false) }} />
           <div className="relative bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 border border-slate-100 animate-fadeIn">
             <div className="text-center mb-6">
               <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-600 mx-auto flex items-center justify-center mb-4">
@@ -718,10 +996,10 @@ export default function DayClosingPage({ user, settings, setPage }) {
               </div>
             </div>
             <div className="flex gap-3">
-              <button onClick={confirmClose} className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white py-3.5 rounded-2xl font-black text-sm transition shadow-lg">
+              <button onClick={confirmClose} disabled={closingBusy} className="flex-1 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white py-3.5 rounded-2xl font-black text-sm transition shadow-lg">
                 ✅ تأكيد الإقفال
               </button>
-              <button onClick={() => setConfirming(false)} className="px-8 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3.5 rounded-2xl font-black text-sm transition">
+              <button onClick={() => setConfirming(false)} disabled={closingBusy} className="px-8 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-600 py-3.5 rounded-2xl font-black text-sm transition">
                 إلغاء
               </button>
             </div>

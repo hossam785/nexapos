@@ -2,7 +2,28 @@ const http = require('http')
 const { DEFAULT_SERVER_PORT } = require('../cashier-client/cashierConnectionService')
 const { unwrap } = require('../../../src/domain/contracts/result.contract')
 
-function createLocalApiServerService({ app, settingsDB, runtimeContext, channelHandlers }) {
+const BLOCKED_REMOTE_CHANNELS = new Set([
+  'db:resetSystem',
+  'db:clearAuditLogs',
+  'db:restoreBackup',
+  'backup:restore',
+  'backup:reset',
+])
+
+const STORE_KEY_HEADER = 'x-nexa-store-key'
+const DEVICE_HEADER = 'x-nexa-device-uuid'
+const MAX_BODY_BYTES = 25 * 1024 * 1024
+
+// Every device of a store runs this server. It serves:
+//  - /health          (public: lets a device be found on the LAN)
+//  - /sync/hello      (store devices only: identity + log head)
+//  - /sync/log        (store devices only: events this device knows, for peers to pull)
+//  - /sync/state/*    (store devices only: a consistent copy of this device's state, for a peer behind its log floor)
+//  - /invoke          (store devices only: legacy thin-client cashiers)
+// "Store devices only" = the request carries this store's secret key (from the pairing code).
+// Without it nothing but /health is reachable, so another computer on the same Wi-Fi cannot
+// read or change the shop's data.
+function createLocalApiServerService({ app, settingsDB, runtimeContext, channelHandlers, storeMesh = null, logger = console }) {
   let server = null
   let listeningPort = null
 
@@ -20,7 +41,9 @@ function createLocalApiServerService({ app, settingsDB, runtimeContext, channelH
       if (Number.isFinite(configured) && configured > 0) {
         return configured
       }
-    } catch (error) {}
+    } catch (error) {
+      logger.warn?.('[local-api-server] could not read configured port:', error?.message)
+    }
 
     return DEFAULT_SERVER_PORT
   }
@@ -28,7 +51,18 @@ function createLocalApiServerService({ app, settingsDB, runtimeContext, channelH
   function readJsonBody(req) {
     return new Promise((resolve, reject) => {
       const chunks = []
-      req.on('data', (chunk) => chunks.push(chunk))
+      let size = 0
+      req.on('data', (chunk) => {
+        size += chunk.length
+        if (size > MAX_BODY_BYTES) {
+          const error = new Error('Request body too large')
+          error.statusCode = 413
+          reject(error)
+          req.destroy()
+          return
+        }
+        chunks.push(chunk)
+      })
       req.on('end', () => {
         const text = Buffer.concat(chunks).toString('utf8')
         if (!text) {
@@ -38,6 +72,7 @@ function createLocalApiServerService({ app, settingsDB, runtimeContext, channelH
         try {
           resolve(JSON.parse(text))
         } catch (error) {
+          error.statusCode = 400
           reject(error)
         }
       })
@@ -53,62 +88,114 @@ function createLocalApiServerService({ app, settingsDB, runtimeContext, channelH
     res.end(JSON.stringify(payload))
   }
 
+  function isStoreDevice(req) {
+    return Boolean(storeMesh && storeMesh.verifyKey(String(req.headers[STORE_KEY_HEADER] || '')))
+  }
+
+  async function handleInvoke(req, res) {
+    const body = await readJsonBody(req)
+    const channel = body?.channel
+    const args = Array.isArray(body?.args) ? body.args : []
+
+    if (!channel || !channelHandlers?.[channel]) {
+      sendJson(res, 404, { ok: false, error: { code: 'CHANNEL_NOT_AVAILABLE', message: 'Requested channel is not available on this server' } })
+      return
+    }
+    if (BLOCKED_REMOTE_CHANNELS.has(channel)) {
+      sendJson(res, 403, { ok: false, error: { code: 'FORBIDDEN_OVER_LAN', message: 'Requested operation cannot be executed remotely over LAN' } })
+      return
+    }
+    const result = unwrap(await channelHandlers[channel](null, ...args))
+    sendJson(res, 200, { ok: true, result })
+  }
+
+  function handleSync(req, res, url) {
+    const requester = String(req.headers[DEVICE_HEADER] || '') || null
+    if (url.pathname === '/sync/hello') {
+      if (requester) storeMesh.recordContact(requester, null, req.socket?.remoteAddress || null)
+      sendJson(res, 200, { ok: true, result: storeMesh.hello(requester) })
+      return
+    }
+    if (url.pathname === '/sync/log') {
+      const result = storeMesh.pullLog({
+        requesterUuid: requester,
+        since: Number(url.searchParams.get('since')) || 0,
+        limit: Number(url.searchParams.get('limit')) || 200,
+        // sent by devices that understand log floors: their reads count for log retention
+        epochId: url.searchParams.get('epoch') || null,
+        protocol: Number(url.searchParams.get('proto')) || 1,
+      })
+      sendJson(res, 200, { ok: true, result })
+      return
+    }
+    // state transfer for a device whose cursor is below this log's floor (see stateTransfer.js)
+    if (url.pathname === '/sync/state/open') {
+      sendJson(res, 200, { ok: true, result: storeMesh.stateSource.open({ requesterUuid: requester }) })
+      return
+    }
+    if (url.pathname === '/sync/state/page') {
+      const result = storeMesh.stateSource.page({
+        sessionId: url.searchParams.get('session'),
+        part: String(url.searchParams.get('part') || ''),
+        after: url.searchParams.get('after'),
+        limit: Number(url.searchParams.get('limit')) || 200,
+      })
+      sendJson(res, 200, { ok: true, result })
+      return
+    }
+    if (url.pathname === '/sync/state/close') {
+      sendJson(res, 200, { ok: true, result: storeMesh.stateSource.close({ sessionId: url.searchParams.get('session') }) })
+      return
+    }
+    sendJson(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: 'Route not found' } })
+  }
+
   return {
     async start() {
-      if (runtimeContext?.profile?.name === 'cashier') {
-        return { started: false, reason: 'cashier-runtime' }
-      }
       if (server) {
         return { started: true, port: listeningPort }
       }
 
       const port = getPort()
       server = http.createServer(async (req, res) => {
-        if (req.method === 'GET' && req.url === '/health') {
-          sendJson(res, 200, {
-            ok: true,
-            appName: app.getName(),
-            runtimeProfile: runtimeContext?.profile?.name || 'combined',
-            runtimeShell: runtimeContext?.shell?.rendererMode || 'combined',
-            port: listeningPort || port,
-          })
-          return
-        }
-
-        if (req.method === 'POST' && req.url === '/invoke') {
-          try {
-            const body = await readJsonBody(req)
-            const channel = body?.channel
-            const args = Array.isArray(body?.args) ? body.args : []
-
-            if (!channel || !channelHandlers?.[channel]) {
-              sendJson(res, 404, {
-                ok: false,
-                error: { code: 'CHANNEL_NOT_AVAILABLE', message: 'Requested channel is not available on this server' },
-              })
-              return
-            }
-
-            const rawResult = await channelHandlers[channel](null, ...args)
-            const result = unwrap(rawResult)
-            sendJson(res, 200, { ok: true, result })
-          } catch (error) {
-            sendJson(res, 500, {
-              ok: false,
-              error: {
-                code: error?.code || 'LOCAL_API_SERVER_ERROR',
-                message: error?.message || 'Server request failed',
-                details: error?.details || null,
-              },
+        try {
+          const url = new URL(req.url, 'http://local')
+          if (req.method === 'GET' && url.pathname === '/health') {
+            sendJson(res, 200, {
+              ok: true,
+              appName: app.getName(),
+              runtimeProfile: runtimeContext?.profile?.name || 'combined',
+              runtimeShell: runtimeContext?.shell?.rendererMode || 'combined',
+              port: listeningPort || port,
             })
+            return
           }
-          return
-        }
 
-        sendJson(res, 404, {
-          ok: false,
-          error: { code: 'NOT_FOUND', message: 'Route not found' },
-        })
+          if (!isStoreDevice(req)) {
+            sendJson(res, 401, { ok: false, error: { code: 'STORE_KEY_REQUIRED', message: 'هذا الجهاز ليس مربوطًا بنفس المحل' } })
+            return
+          }
+
+          if (req.method === 'GET' && url.pathname.startsWith('/sync/')) {
+            handleSync(req, res, url)
+            return
+          }
+          if (req.method === 'POST' && url.pathname === '/invoke') {
+            await handleInvoke(req, res)
+            return
+          }
+          sendJson(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: 'Route not found' } })
+        } catch (error) {
+          logger.error?.('[local-api-server] request failed:', error?.message)
+          sendJson(res, error?.statusCode || 500, {
+            ok: false,
+            error: {
+              code: error?.code || 'LOCAL_API_SERVER_ERROR',
+              message: error?.message || 'Server request failed',
+              details: error?.details || null,
+            },
+          })
+        }
       })
 
       await new Promise((resolve, reject) => {
@@ -123,6 +210,7 @@ function createLocalApiServerService({ app, settingsDB, runtimeContext, channelH
     },
 
     stop() {
+      storeMesh?.stateSource?.closeAll?.()
       if (!server) return
       server.close()
       server = null
@@ -139,4 +227,4 @@ function createLocalApiServerService({ app, settingsDB, runtimeContext, channelH
   }
 }
 
-module.exports = { createLocalApiServerService }
+module.exports = { createLocalApiServerService, STORE_KEY_HEADER, DEVICE_HEADER }

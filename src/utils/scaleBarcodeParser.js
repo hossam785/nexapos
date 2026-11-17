@@ -9,6 +9,8 @@ export const DEFAULT_SCALE_BARCODE_SETTINGS = {
   valueStart: 7,
   valueLength: 5,
   decimalPlaces: 3,
+  validateCheckDigit: true,
+  valueType: 'weight',
 }
 
 function readSetting(settings, names, fallback) {
@@ -81,6 +83,13 @@ export function getScaleBarcodeSettings(settings = {}) {
       readSetting(settings, ['scale_decimal_places', 'scaleDecimalPlaces'], DEFAULT_SCALE_BARCODE_SETTINGS.decimalPlaces),
       DEFAULT_SCALE_BARCODE_SETTINGS.decimalPlaces
     ),
+    validateCheckDigit: asBool(
+      readSetting(settings, ['scale_validate_check_digit', 'scaleValidateCheckDigit'], DEFAULT_SCALE_BARCODE_SETTINGS.validateCheckDigit),
+      DEFAULT_SCALE_BARCODE_SETTINGS.validateCheckDigit
+    ),
+    valueType: String(
+      readSetting(settings, ['scale_value_type', 'scaleValueType'], DEFAULT_SCALE_BARCODE_SETTINGS.valueType)
+    ).trim().toLowerCase() === 'price' ? 'price' : 'weight',
   }
 }
 
@@ -124,7 +133,9 @@ export function parseScaleBarcode(barcode, settings = {}) {
   const prefixValue = raw.slice(config.prefixStart, config.prefixStart + config.prefixLength)
   if (prefixValue !== config.prefix) return { isScaleBarcode: false, reason: 'prefix_mismatch' }
 
-  if (!validateCheckDigit(raw)) return { isScaleBarcode: false, reason: 'invalid_check_digit' }
+  if (config.validateCheckDigit && !validateCheckDigit(raw)) {
+    return { isScaleBarcode: false, reason: 'invalid_check_digit' }
+  }
 
   const productCode = raw.slice(config.productCodeStart, config.productCodeStart + config.productCodeLength)
   const valueText = raw.slice(config.valueStart, config.valueStart + config.valueLength)
@@ -137,21 +148,42 @@ export function parseScaleBarcode(barcode, settings = {}) {
   }
 
   const rawValue = Number.parseInt(valueText, 10)
-  const weight = rawValue / Math.pow(10, config.decimalPlaces)
-  if (!Number.isFinite(weight) || weight <= 0) {
-    return { isScaleBarcode: false, reason: 'invalid_weight' }
+  const divisor = Math.pow(10, config.decimalPlaces)
+  const parsedAmount = rawValue / divisor
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    return { isScaleBarcode: false, reason: config.valueType === 'price' ? 'invalid_price' : 'invalid_weight' }
   }
 
   return {
     isScaleBarcode: true,
     productCode,
-    valueType: 'weight',
-    weight,
-    value: weight,
+    normalizedProductCode: normalizeScaleCode(productCode),
+    valueType: config.valueType,
+    weight: config.valueType === 'weight' ? parsedAmount : null,
+    totalPrice: config.valueType === 'price' ? parsedAmount : null,
+    value: parsedAmount,
     rawValue: valueText,
     barcode: raw,
     config,
   }
 }
 
+export function normalizeScaleCode(code) {
+  if (code === undefined || code === null) return ''
+  const str = String(code).trim()
+  if (!str) return ''
+  if (/^\d+$/.test(str)) {
+    return str.replace(/^0+/, '') || '0'
+  }
+  return str.toLowerCase()
+}
+
+export function matchScaleCode(codeA, codeB) {
+  const normA = normalizeScaleCode(codeA)
+  const normB = normalizeScaleCode(codeB)
+  if (!normA || !normB) return false
+  return normA === normB
+}
+
 export default parseScaleBarcode
+

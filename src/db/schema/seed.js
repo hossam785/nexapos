@@ -1,9 +1,9 @@
-﻿const defaultSettings = {
-store_name: 'MGIVIA',
+const defaultSettings = {
+store_name: 'NEXA POS',
   store_phone: '',
   store_address: '',
-  currency: 'د.ل',
-  currency_symbol: 'د.ل',
+  currency: 'ج.م',
+  currency_symbol: 'ج.م',
   tax_rate: '0',
   tax_enabled: '0',
   invoice_footer: 'شكراً لزيارتكم',
@@ -30,6 +30,8 @@ store_name: 'MGIVIA',
   prevent_delete_last_admin: '1',
   protect_sensitive_ops: '1',
   auto_logout_minutes: '0',
+  return_authorization_enabled: '1',
+  return_authorization_code: '1234',
   day_closing_enabled: '1',
   cashier_can_open_shift: '1',
   cashier_can_close: '1',
@@ -38,6 +40,8 @@ store_name: 'MGIVIA',
   cash_diff_limit: '10',
   alert_on_diff: '1',
   auto_backup: '0',
+  auto_backup_frequency: 'daily',
+  auto_backup_last_run: '',
   scale_barcode_enabled: '1',
   scale_barcode_length: '13',
   scale_barcode_prefix: '21',
@@ -48,14 +52,11 @@ store_name: 'MGIVIA',
   scale_value_start: '7',
   scale_value_length: '5',
   scale_decimal_places: '3',
+  expiry_alert_enabled: '1',
   expiry_alert_days: '7',
 }
 
 function seedDefaultUsers(db) {
-  try {
-    db.prepare("UPDATE users SET username = 'admin', password = '1234' WHERE role = 'admin'").run()
-  } catch (e) {}
-
   const adminExists = db.prepare('SELECT id FROM users WHERE username = ?').get('admin')
   if (!adminExists) {
     db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run('admin', '1234', 'admin')

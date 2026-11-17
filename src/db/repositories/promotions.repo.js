@@ -25,8 +25,8 @@ function createPromotionsRepo({ db }) {
   return {
     transaction: (run) => db.transaction(run)(),
 
-    getAll: () =>
-      db.prepare(`
+    getAll: () => {
+      const promotions = db.prepare(`
         SELECT
           p.*,
           u.username AS created_by_name,
@@ -36,7 +36,36 @@ function createPromotionsRepo({ db }) {
         LEFT JOIN promotion_items pi ON pi.promotion_id = p.id
         GROUP BY p.id
         ORDER BY p.is_active DESC, p.created_at DESC
-      `).all(),
+      `).all()
+
+      if (!promotions.length) return []
+
+      const allItems = db.prepare(`
+        SELECT
+          pi.*,
+          p.name AS product_name,
+          p.barcode,
+          p.sell_price,
+          p.is_active AS product_is_active
+        FROM promotion_items pi
+        LEFT JOIN products p ON p.id = pi.product_id
+        ORDER BY p.name ASC
+      `).all()
+
+      const itemsByPromo = new Map()
+      for (const item of allItems) {
+        if (!itemsByPromo.has(item.promotion_id)) {
+          itemsByPromo.set(item.promotion_id, [])
+        }
+        itemsByPromo.get(item.promotion_id).push(item)
+      }
+
+      for (const promo of promotions) {
+        promo.items = itemsByPromo.get(promo.id) || []
+      }
+
+      return promotions
+    },
 
     getById: (id) =>
       db.prepare(`
@@ -55,10 +84,13 @@ function createPromotionsRepo({ db }) {
           p.sell_price,
           p.is_active AS product_is_active
         FROM promotion_items pi
-        JOIN products p ON p.id = pi.product_id
+        LEFT JOIN products p ON p.id = pi.product_id
         WHERE pi.promotion_id = ?
         ORDER BY p.name ASC
       `).all(promotionId),
+
+    productExists: (productId) =>
+      Boolean(db.prepare('SELECT 1 FROM products WHERE id = ?').get(productId)),
 
     getActiveByDate: (dateStr) =>
       db.prepare(`
@@ -87,10 +119,11 @@ function createPromotionsRepo({ db }) {
     insertItem: (promotionId, productId, requiredQty) =>
       insertPromotionItemStmt.run(promotionId, productId, requiredQty),
 
-    deletePromotion: (id) => {
-      db.prepare('DELETE FROM promotion_items WHERE promotion_id = ?').run(id)
-      return db.prepare('DELETE FROM promotions WHERE id = ?').run(id)
-    },
+    deletePromotion: (id) =>
+      db.transaction(() => {
+        db.prepare('DELETE FROM promotion_items WHERE promotion_id = ?').run(id)
+        return db.prepare('DELETE FROM promotions WHERE id = ?').run(id)
+      })(),
 
     setActive: (id, isActive) =>
       db.prepare(`

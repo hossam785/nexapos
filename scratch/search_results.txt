@@ -1,0 +1,10 @@
+db\repositories\closings.repo.js: supplier_transactions
+db\repositories\reports.repo.js: purchase_invoices, purchase_items
+db\repositories\suppliers.repo.js: purchase_invoices, purchase_items, createPurchaseInvoice, getPurchaseInvoice, supplier_transactions
+db\repositories\system.repo.js: purchase_invoices, purchase_items, supplier_transactions
+db\schema\tables.js: purchase_invoices, purchase_items, supplier_transactions
+domain\services\purchases.service.js: createPurchaseInvoice, getPurchaseInvoice
+pages\customers\CustomersPage.jsx: createPurchaseInvoice, getPurchaseInvoice
+pages\purchases\PurchasesPage.jsx: createPurchaseInvoice, getPurchaseInvoice
+pages\reports\ReportsPage.jsx: getPurchaseInvoice
+pages\reports\ReturnsView.jsx: getPurchaseInvoice

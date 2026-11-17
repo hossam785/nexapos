@@ -7,6 +7,7 @@ module.exports = {
     'src/domain/**/*',
     'src/permissions/**/*',
     'src/runtime/**/*',
+    'src/utils/**/*',
     'package.json',
     '!license-generator',
     '!license-generator/**/*',

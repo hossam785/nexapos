@@ -15,6 +15,9 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
   })
   const [allowCredit, setAllowCredit] = useState(customer ? customer.credit_limit > 0 : false)
   const [saveError, setSaveError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  // a second click before the first save has returned must not save twice
+  const submittingRef = useRef(false)
 
   useEffect(() => {
     const restore = () => {
@@ -34,16 +37,15 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
     setSaveError('')
   }
 
-  function handleSave() {
+  async function handleSave() {
+    if (submittingRef.current) return
     if (!form.name.trim()) { setSaveError('اسم العميل مطلوب'); return }
     
-    let balance = 0
-    if (form.status === 'deferred') {
-       const total = parseFloat(form.total_debt) || 0
-       const paid = parseFloat(form.paid_amount) || 0
-       balance = total - paid
-    }
-    balance = balance > 0 ? balance : 0
+    const total = parseFloat(form.total_debt) || 0
+    const paidNow = parseFloat(form.paid_amount) || 0
+    const deferred = form.status === 'deferred'
+    if (deferred && (total < 0 || paidNow < 0)) { setSaveError('المبالغ لازم تكون صفر أو أكبر'); return }
+    const balance = deferred ? Math.max(0, total - paidNow) : 0
 
     const creditLimit = allowCredit ? (parseFloat(form.credit_limit) || 0) : 0
     if (allowCredit && creditLimit <= 0) {
@@ -55,13 +57,37 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
       return
     }
 
-    onSave({
-      name: form.name.trim(),
-      phone: form.phone.trim(),
-      notes: form.notes.trim(),
-      credit_limit: creditLimit,
-      balance
-    })
+    submittingRef.current = true
+    setIsSubmitting(true)
+    setSaveError('')
+    try {
+      const payload = { name: form.name.trim(), phone: form.phone.trim(), notes: form.notes.trim(), credit_limit: creditLimit }
+      if (customer) {
+        // The balance of an existing customer changes only through ledger rows, never through a number a stale
+        // form could overwrite: "paid" settles the whole debt as a payment; a changed total is a reasoned delta.
+        const original = Number(customer.balance || 0)
+        if (form.status === 'paid') {
+          payload.balance_settle = original > 0
+        } else {
+          payload.balance_paid = paidNow
+          payload.balance_delta = Math.round((total - original) * 100) / 100
+          payload.balance_reason = 'تعديل رصيد من شاشة العميل'
+        }
+      } else {
+        payload.balance = balance
+      }
+      await onSave(payload)
+    } catch (err) {
+      const msg = String(err?.message || '').replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+      if (err?.code === 'DUPLICATE_PHONE' || msg.includes('DUPLICATE_PHONE')) {
+        setSaveError('رقم الهاتف مسجل مسبقاً لعميل آخر')
+      } else {
+        setSaveError(msg || 'حدث خطأ أثناء حفظ بيانات العميل')
+      }
+    } finally {
+      submittingRef.current = false
+      setIsSubmitting(false)
+    }
   }
 
   const calculatedBalance = Math.max(0, (parseFloat(form.total_debt) || 0) - (parseFloat(form.paid_amount) || 0))
@@ -79,7 +105,7 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
           <h2 className="text-xl font-bold text-slate-700 font-sans">
             {customer ? 'تعديل بيانات عميل' : 'إضافة عميل جديد'}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
+          <button onClick={onClose} aria-label="إغلاق" className="text-slate-400 hover:text-slate-600 transition">
             <X size={20} strokeWidth={2.5} />
           </button>
         </div>
@@ -90,8 +116,8 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
             <h3 className="font-bold text-slate-700 text-lg mb-4 border-b border-slate-100 pb-2">البيانات الأساسية</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">الاسم: *</label>
-                <input
+                <label htmlFor="cm-name" className="block text-sm font-bold text-slate-700 mb-2">الاسم: *</label>
+                <input id="cm-name"
                   ref={nameInputRef}
                   data-primary-input="true"
                   type="text"
@@ -104,8 +130,8 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">الهاتف:</label>
-                <input
+                <label htmlFor="cm-phone" className="block text-sm font-bold text-slate-700 mb-2">الهاتف:</label>
+                <input id="cm-phone"
                   type="text"
                   value={form.phone}
                   onChange={e => set('phone', e.target.value)}
@@ -115,8 +141,8 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">ملاحظات:</label>
-                <input
+                <label htmlFor="cm-notes" className="block text-sm font-bold text-slate-700 mb-2">ملاحظات:</label>
+                <input id="cm-notes"
                   type="text"
                   value={form.notes}
                   onChange={e => set('notes', e.target.value)}
@@ -149,8 +175,8 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
             {form.status === 'deferred' && (
               <div className="bg-red-50/50 rounded-xl p-4 border border-red-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">إجمالي الدين (المبلغ المستحق للدفع):</label>
-                    <input
+                    <label htmlFor="cm-total" className="block text-sm font-bold text-slate-700 mb-2">إجمالي الدين (المبلغ المستحق للدفع):</label>
+                    <input id="cm-total"
                       type="number"
                       value={form.total_debt}
                       onChange={e => set('total_debt', e.target.value)}
@@ -159,8 +185,8 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
                     />
                  </div>
                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">المبلغ المسدد (دفع منه كام؟):</label>
-                    <input
+                    <label htmlFor="cm-paid" className="block text-sm font-bold text-slate-700 mb-2">المبلغ المسدد (دفع منه كام؟):</label>
+                    <input id="cm-paid"
                       type="number"
                       value={form.paid_amount}
                       onChange={e => set('paid_amount', e.target.value)}
@@ -194,8 +220,8 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
 
             {allowCredit && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-200 mt-2">
-                <label className="block text-sm font-bold text-slate-700 mb-2">أقصى حد للائتمان (المديونية المسموحة):</label>
-                <input
+                <label htmlFor="cm-limit" className="block text-sm font-bold text-slate-700 mb-2">أقصى حد للائتمان (المديونية المسموحة):</label>
+                <input id="cm-limit"
                   type="number"
                   value={form.credit_limit}
                   onChange={e => set('credit_limit', e.target.value)}
@@ -217,9 +243,10 @@ export default function CustomerModal({ customer, currency = 'ج.م', onSave, on
           )}
           <button
             onClick={handleSave}
-            className="w-full bg-[#2aa15f] hover:bg-[#258d53] text-white font-bold py-4 rounded-xl transition shadow-lg shadow-[#2aa15f]/20 hover:shadow-[#2aa15f]/40 hover:-translate-y-0.5"
+            disabled={isSubmitting}
+            className="w-full bg-[#2aa15f] hover:bg-[#258d53] disabled:opacity-50 text-white font-bold py-4 rounded-xl transition shadow-lg shadow-[#2aa15f]/20 hover:shadow-[#2aa15f]/40 hover:-translate-y-0.5"
           >
-            {customer ? 'تحديث بيانات العميل وحفظها' : 'حفظ وتسجيل العميل الجديد'}
+            {isSubmitting ? 'جاري الحفظ...' : customer ? 'تحديث بيانات العميل وحفظها' : 'حفظ وتسجيل العميل الجديد'}
           </button>
         </div>
       </div>

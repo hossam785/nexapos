@@ -2,7 +2,7 @@ const { createDomainFacade } = require('./createDomainFacade')
 
 function requireObject(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    const error = new Error(`${label} is required`)
+    const error = new Error(label === 'supplier' ? 'بيانات المورد غير صالحة' : `${label} is required`)
     error.code = 'VALIDATION_ERROR'
     throw error
   }
@@ -34,6 +34,13 @@ function createAppFacade({ salesController, purchasesController, inventoryContro
         },
         execute: (event, invoice, items) => salesController.createInvoice(event, invoice, items),
       },
+      createBackdatedInvoice: {
+        validate: (invoice, items) => {
+          requireObject(invoice, 'invoice')
+          requireArray(items, 'items')
+        },
+        execute: (event, invoice, items) => salesController.createBackdatedInvoice(event, invoice, items),
+      },
       getInvoiceItems: {
         validate: (id) => requireId(id, 'invoiceId'),
         execute: (event, id) => salesController.getInvoiceItems(event, id),
@@ -42,7 +49,29 @@ function createAppFacade({ salesController, purchasesController, inventoryContro
         validate: (id) => requireId(id, 'invoiceId'),
         execute: (event, id) => salesController.getInvoiceWithItems(event, id),
       },
+      getInvoiceReturnableItems: {
+        validate: (id) => requireId(id, 'invoiceId'),
+        execute: (event, id) => salesController.getInvoiceReturnableItems(event, id),
+      },
+      updateOriginalInvoiceFinancials: {
+        validate: (id) => requireId(id, 'invoiceId'),
+        execute: (event, id) => salesController.updateOriginalInvoiceFinancials(event, id),
+      },
       getDailySummary: () => salesController.getDailySummary(),
+      saveDraft: {
+        validate: (draft) => requireObject(draft, 'draft'),
+        execute: (event, draft) => salesController.saveDraft(event, draft),
+      },
+      getDrafts: {
+        validate: (userId) => requireId(userId, 'userId'),
+        execute: (event, userId) => salesController.getDrafts(event, userId),
+      },
+      deleteDraft: {
+        validate: (draftId) => requireId(draftId, 'draftId'),
+        execute: (event, draftId) => salesController.deleteDraft(event, draftId),
+      },
+      getTodayCompletedSaleCount: (event, businessDate) => salesController.getTodayCompletedSaleCount(event, businessDate),
+      getNextDailyInvoiceNumber: (event, businessDate) => salesController.getNextDailyInvoiceNumber(event, businessDate),
     }),
 
     purchases: createDomainFacade('purchases', {
@@ -50,6 +79,9 @@ function createAppFacade({ salesController, purchasesController, inventoryContro
       getSupplierById: {
         validate: (id) => requireId(id, 'supplierId'),
         execute: (event, id) => purchasesController.getSupplierById(event, id),
+      },
+      checkSupplierConflict: {
+        execute: (event, data) => purchasesController.checkSupplierConflict(event, data),
       },
       addSupplier: {
         validate: (data) => requireObject(data, 'supplier'),
@@ -89,6 +121,9 @@ function createAppFacade({ salesController, purchasesController, inventoryContro
         validate: (supplierId) => requireId(supplierId, 'supplierId'),
         execute: (event, supplierId) => purchasesController.getSupplierInvoices(event, supplierId),
       },
+      getAllPurchases: {
+        execute: (event, options) => purchasesController.getAllPurchases(event, options),
+      },
       getPurchaseInvoiceById: {
         validate: (invoiceId) => requireId(invoiceId, 'invoiceId'),
         execute: (event, invoiceId) => purchasesController.getPurchaseInvoiceById(event, invoiceId),
@@ -121,6 +156,10 @@ function createAppFacade({ salesController, purchasesController, inventoryContro
         execute: (event, productId) => inventoryController.getStockMovements(event, productId),
       },
       getFullInventory: (event, from, to) => inventoryController.getFullInventory(event, from, to),
+      getInventorySummary: (event, from, to) => inventoryController.getInventorySummary(event, from, to),
+      getInventoryPaginated: (event, options) => inventoryController.getInventoryPaginated(event, options),
+      getWarehouseStockPaginated: (event, options) => inventoryController.getWarehouseStockPaginated(event, options),
+      getWarehouseKPIs: (event, options) => inventoryController.getWarehouseKPIs(event, options),
       getStockComparison: (event, dateA, dateB) => inventoryController.getStockComparison(event, dateA, dateB),
       transferWarehouseStock: {
         validate: (productId, amount, fromWarehouse, toWarehouse) => {
@@ -173,6 +212,52 @@ function createAppFacade({ salesController, purchasesController, inventoryContro
       getProductWarehouses: {
         validate: (productId) => requireId(productId, 'productId'),
         execute: (event, productId) => inventoryController.getProductWarehouses(event, productId),
+      },
+      getWarehouseReconciliationCatalog: {
+        validate: (warehouseId) => requireId(warehouseId, 'warehouseId'),
+        execute: (event, warehouseId) => inventoryController.getWarehouseReconciliationCatalog(event, warehouseId),
+      },
+      getWarehouseReconciliationCatalogPaginated: (event, options) => inventoryController.getWarehouseReconciliationCatalogPaginated(event, options),
+      getReconciliationProductByCode: (event, warehouseId, code) => inventoryController.getReconciliationProductByCode(event, warehouseId, code),
+      getWarehouseCategoriesList: (event) => inventoryController.getWarehouseCategoriesList(event),
+      searchProductsForReconciliationMapping: (event, options) => inventoryController.searchProductsForReconciliationMapping(event, options),
+      batchLookupProductsForReconciliation: (event, warehouseId, payload) => inventoryController.batchLookupProductsForReconciliation(event, warehouseId, payload),
+      checkSingleBarcodeAvailability: (event, payload) => inventoryController.checkSingleBarcodeAvailability(event, payload),
+      validateReconciliationCodesBatch: (event, payload) => inventoryController.validateReconciliationCodesBatch(event, payload),
+      quickCreateReconciliationProduct: {
+        validate: (payload) => requireObject(payload, 'quickCreatePayload'),
+        execute: (event, payload) => inventoryController.quickCreateReconciliationProduct(event, payload),
+      },
+      matchReconciliationRowsByBarcode: (event, warehouseId, rows) => inventoryController.matchReconciliationRowsByBarcode(event, warehouseId, rows),
+      matchReconciliationRowsByName: (event, warehouseId, rows) => inventoryController.matchReconciliationRowsByName(event, warehouseId, rows),
+      classifyReconciliationExcel: {
+        validate: (payload) => requireObject(payload, 'classifyReconciliationPayload'),
+        execute: (event, payload) => inventoryController.classifyReconciliationExcel(event, payload),
+      },
+      recalculateReconciliationVariance: {
+        validate: (payload) => requireObject(payload, 'recalculateVariancePayload'),
+        execute: (event, payload) => inventoryController.recalculateReconciliationVariance(event, payload),
+      },
+      applyBatchReconciliationStrategy: {
+        validate: (payload) => requireObject(payload, 'applyBatchStrategyPayload'),
+        execute: (event, payload) => inventoryController.applyBatchReconciliationStrategy(event, payload),
+      },
+      checkReconciliationConcurrencyDrift: {
+        validate: (payload) => requireObject(payload, 'checkConcurrencyPayload'),
+        execute: (event, payload) => inventoryController.checkReconciliationConcurrencyDrift(event, payload),
+      },
+      rebaseReconciliationItems: {
+        validate: (payload) => requireObject(payload, 'rebaseItemsPayload'),
+        execute: (event, payload) => inventoryController.rebaseReconciliationItems(event, payload),
+      },
+      getReconciliations: (event, warehouseId, limit) => inventoryController.getReconciliations(event, warehouseId, limit),
+      getReconciliationDetails: {
+        validate: (id) => requireId(id, 'reconciliationId'),
+        execute: (event, id) => inventoryController.getReconciliationDetails(event, id),
+      },
+      executeReconciliation: {
+        validate: (data) => requireObject(data, 'reconciliationData'),
+        execute: (event, data) => inventoryController.executeReconciliation(event, data),
       },
     }),
 

@@ -1,0 +1,338 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4000 2700" width="4000" height="2700" style="background-color: #ffffff;">
+<defs>
+
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
+        </marker>
+        <marker id="dashed-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 9 5 L 0 8.5" fill="none" stroke="#000000" stroke-width="1.8" />
+        </marker>
+    
+</defs>
+<rect width="4000" height="2700" fill="#ffffff" />
+<rect x="30" y="30" width="3940" height="2640" fill="none" stroke="#000000" stroke-width="4" />
+<text x="2000" y="85" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="34" font-weight="900" text-anchor="middle" fill="#000000">نظام NEXA POS المتكامل لإدارة التجزئة والجملة والمخازن (UML Use Case Diagram)</text>
+<text x="2000" y="125" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="20" font-weight="500" text-anchor="middle" fill="#333333">المخطط الأكاديمي الشامل لحالات الاستخدام - مخصص للمناقشة والطباعة البوسترية</text>
+<rect x="420" y="160" width="3160" height="2460" fill="#ffffff" stroke="#000000" stroke-width="3" rx="15" />
+<text x="450" y="205" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="26" font-weight="bold" fill="#000000">حدود نظام NEXA POS (System Boundary)</text>
+<circle cx="220" cy="1100" r="35" fill="#ffffff" stroke="#000000" stroke-width="4" />
+<line x1="220" y1="1135" x2="220" y2="1250" stroke="#000000" stroke-width="4" />
+<line x1="160" y1="1180" x2="280" y2="1180" stroke="#000000" stroke-width="4" />
+<line x1="220" y1="1250" x2="170" y2="1360" stroke="#000000" stroke-width="4" />
+<line x1="220" y1="1250" x2="270" y2="1360" stroke="#000000" stroke-width="4" />
+<rect x="80" y="1380" width="280" height="45" fill="#ffffff" stroke="#000000" stroke-width="2" rx="6" />
+<text x="220" y="1410" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#000000">الكاشير (Cashier)</text>
+<circle cx="3780" cy="1100" r="35" fill="#ffffff" stroke="#000000" stroke-width="4" />
+<line x1="3780" y1="1135" x2="3780" y2="1250" stroke="#000000" stroke-width="4" />
+<line x1="3720" y1="1180" x2="3840" y2="1180" stroke="#000000" stroke-width="4" />
+<line x1="3780" y1="1250" x2="3730" y2="1360" stroke="#000000" stroke-width="4" />
+<line x1="3780" y1="1250" x2="3830" y2="1360" stroke="#000000" stroke-width="4" />
+<rect x="3640" y="1380" width="280" height="45" fill="#ffffff" stroke="#000000" stroke-width="2" rx="6" />
+<text x="3780" y="1410" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#000000">مدير النظام / المشرف (Admin)</text>
+
+            <rect x="470" y="230" width="580" height="800" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="485" y="255" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">1. نقطة البيع والسلات المباشرة (POS &amp; Checkout)</text>
+        
+<ellipse cx="760" cy="300" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="305.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">مسح الباركود وقراءة الميزان الموزون</text>
+<ellipse cx="760" cy="375" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="380.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إدارة السلات المتعددة 1-5 وحفظ التعليق</text>
+<ellipse cx="760" cy="450" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="455.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تعديل كمية الصنف (+ / - / يدوي)</text>
+<ellipse cx="760" cy="525" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="530.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تطبيق خصم صنف أو خصم الفاتورة</text>
+<ellipse cx="760" cy="600" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="605.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">ربط الفاتورة بعميل نقدي أو آجل</text>
+<ellipse cx="760" cy="680" rx="225" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="685.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إتمام الدفع المتعدد (كاش/فيزا/آجل)</text>
+<ellipse cx="760" cy="760" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="765.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إنهاء وحفظ سريع بدون طباعة</text>
+<ellipse cx="760" cy="835" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="840.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">استعادة السلة والوردية عند الانهيار</text>
+<ellipse cx="760" cy="910" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" stroke-dasharray="6,4" />
+<text x="760" y="915.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تصفير وإلغاء كامل السلة</text>
+
+            <rect x="470" y="1050" width="580" height="310" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="485" y="1075" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">2. عمليات الكاشير المقيدة أمنياً (Restricted Actions)</text>
+        
+<ellipse cx="760" cy="1120" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" stroke-dasharray="6,4" />
+<text x="760" y="1125.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تعديل السعر المباشر للصنف</text>
+<ellipse cx="760" cy="1195" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" stroke-dasharray="6,4" />
+<text x="760" y="1200.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">حذف صنف من السلة بعد إضافته</text>
+<ellipse cx="760" cy="1270" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" stroke-dasharray="6,4" />
+<text x="760" y="1275.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إرجاع فاتورة مقيدة أو بدون إيصال</text>
+
+            <rect x="470" y="1380" width="580" height="360" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="485" y="1405" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">3. المرتجعات والتسويات (Returns &amp; Refunds)</text>
+        
+<ellipse cx="760" cy="1455" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="1460.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">البحث عن الفاتورة بالباركود أو الرقم</text>
+<ellipse cx="760" cy="1535" rx="225" ry="30" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="1540.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تحديد الأصناف والكميات المرتجعة</text>
+<ellipse cx="760" cy="1615" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="1620.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">احتساب الخصم العادل تلقائياً للبنود</text>
+<ellipse cx="760" cy="1690" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="1695.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">طباعة إيصال مرتجع رسمي</text>
+
+            <rect x="470" y="1760" width="580" height="600" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="485" y="1785" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">4. إدارة الوردية ودرج النقدية (Shifts &amp; Drawer)</text>
+        
+<ellipse cx="760" cy="1835" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="1840.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">فتح وردية مع إدخال العهدة النقدية</text>
+<ellipse cx="760" cy="1910" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="1915.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تسجيل حركة إيداع نقدية إضافية</text>
+<ellipse cx="760" cy="1985" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="1990.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تسجيل سحب نقدي ومصروفات نقدية</text>
+<ellipse cx="760" cy="2060" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="2065.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">جرد فئات النقدية الفعلية بالدرج</text>
+<ellipse cx="760" cy="2140" rx="225" ry="30" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="2145.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إغلاق الوردية وحساب العجز أو الزيادة</text>
+<ellipse cx="760" cy="2220" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="760" y="2225.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">طباعة تقرير تسليم الوردية X-Report</text>
+
+            <rect x="1080" y="480" width="540" height="560" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="1095" y="505" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">5. عمليات التضمين التلقائي للبيع (Checkout &lt;&lt;include&gt;&gt;)</text>
+        
+<ellipse cx="1350" cy="560" rx="210" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="1350" y="565.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">حساب الباقي التلقائي للعميل</text>
+<ellipse cx="1350" cy="650" rx="210" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="1350" y="655.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">فتح درج النقدية آلياً ESC/POS</text>
+<ellipse cx="1350" cy="740" rx="215" ry="30" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="1350" y="745.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">طباعة الفاتورة الحرارية 80/58 والضريبة</text>
+<ellipse cx="1350" cy="830" rx="210" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="1350" y="835.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إعادة البضاعة للمخزون آلياً (FIFO)</text>
+<ellipse cx="1350" cy="920" rx="210" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="1350" y="925.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">صرف المرتجع نقداً أو رصيد دائن</text>
+
+            <rect x="1660" y="1020" width="560" height="360" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="1675" y="1045" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">6. تجاوز المشرف وسجل التدقيق (Security PIN &amp; Audit)</text>
+        
+<ellipse cx="1940" cy="1120" rx="230" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="1940" y="1125.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إذن تجاوز المشرف بالرمز السري PIN</text>
+<ellipse cx="1940" cy="1220" rx="225" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="1940" y="1225.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تسجيل بالثانية في سجل التدقيق الأمني</text>
+<ellipse cx="1940" cy="1315" rx="220" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="1940" y="1320.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إغلاق اليومية المحاسبية Z-Report</text>
+
+            <rect x="2300" y="230" width="700" height="680" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="2315" y="255" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">7. المخزون والأصناف والدفعات (Inventory &amp; Batches)</text>
+        
+<ellipse cx="2650" cy="290" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="295.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إضافة وتعديل بطاقة الصنف</text>
+<ellipse cx="2650" cy="355" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="360.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إدارة الوحدات والباركود المتعدد</text>
+<ellipse cx="2650" cy="420" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="425.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تسعير متعدد: قطاعي / جملة / نصف</text>
+<ellipse cx="2650" cy="485" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="490.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تتبع الدفعات وتواريخ الصلاحية FIFO</text>
+<ellipse cx="2650" cy="550" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="555.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تنبيهات النواقص وقرب الصلاحية</text>
+<ellipse cx="2650" cy="615" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="620.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">التسوية الجردية وتعديل الأرصدة</text>
+<ellipse cx="2650" cy="680" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="685.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تصميم وطباعة ملصقات الباركود</text>
+<ellipse cx="2650" cy="745" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="750.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">استيراد وتصدير الأصناف عبر Excel</text>
+<ellipse cx="2650" cy="810" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="815.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تحديث متوسط التكلفة المرجح آلياً</text>
+
+            <rect x="2300" y="930" width="700" height="480" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="2315" y="955" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">8. المشتريات والتوريدات والموردين (Purchases &amp; Suppliers)</text>
+        
+<ellipse cx="2650" cy="995" rx="235" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1000.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تسجيل فاتورة شراء جديدة من مورد</text>
+<ellipse cx="2650" cy="1065" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1070.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إدخال أرقام التشغيلات وصلاحية التوريد</text>
+<ellipse cx="2650" cy="1135" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1140.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">سداد دفعات نقدية للموردين وتسوية</text>
+<ellipse cx="2650" cy="1205" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1210.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">طباعة كشف حساب المورد والمستحقات</text>
+<ellipse cx="2650" cy="1275" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1280.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إثبات مردودات مشتريات لمورد</text>
+<ellipse cx="2650" cy="1345" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1350.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">متابعة مواعيد استحقاق فواتير المورد</text>
+
+            <rect x="2300" y="1430" width="700" height="440" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="2315" y="1455" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">9. عملاء الجملة والحسابات الآجلة (Wholesale B2B)</text>
+        
+<ellipse cx="2650" cy="1495" rx="235" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1500.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تسجيل عملاء الجملة وحدود الائتمان</text>
+<ellipse cx="2650" cy="1565" rx="235" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1570.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إصدار فواتير بيع جملة بالأسعار المخفضة</text>
+<ellipse cx="2650" cy="1635" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1640.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تحصيل دفعات عملاء الجملة والمديونية</text>
+<ellipse cx="2650" cy="1705" rx="235" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1710.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">طباعة كشف حساب عميل جملة مفصل</text>
+<ellipse cx="2650" cy="1775" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1780.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">كشف أعمار الديون والمديونيات المتأخرة</text>
+
+            <rect x="2300" y="1890" width="700" height="320" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="2315" y="1915" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">10. المصروفات والتوالف (Expenses &amp; Shrinkage)</text>
+        
+<ellipse cx="2650" cy="1955" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="1960.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تسجيل سند صرف مصروف نثري وتصنيفه</text>
+<ellipse cx="2650" cy="2025" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="2030.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تسجيل بضاعة تالفة أو منتهية الصلاحية</text>
+<ellipse cx="2650" cy="2095" rx="230" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="2650" y="2100.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">خصم التوالف من المخزون وحساب الخسائر</text>
+
+            <rect x="3030" y="230" width="520" height="680" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="3045" y="255" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">11. التقارير والذكاء التجاري (BI Reports)</text>
+        
+<ellipse cx="3280" cy="295" rx="210" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="300.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تقارير المبيعات: ساعي، يومي، شهري</text>
+<ellipse cx="3280" cy="365" rx="210" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="370.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تقارير الأرباح الإجمالية وصافي الهامش</text>
+<ellipse cx="3280" cy="435" rx="210" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="440.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تحليل الأصناف الأكثر مبيعاً والأعلى ربحاً</text>
+<ellipse cx="3280" cy="505" rx="210" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="510.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تقرير تدفقات السيولة وحركة الخزينة</text>
+<ellipse cx="3280" cy="575" rx="210" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="580.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تقرير الإقرار الضريبي وضريبة القيمة المضافة</text>
+<ellipse cx="3280" cy="645" rx="210" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="650.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تصدير جميع التقارير إلى PDF و Excel</text>
+
+            <rect x="3030" y="930" width="520" height="680" fill="#fafafa" stroke="#666666" stroke-width="1.5" stroke-dasharray="4,4" rx="10" />
+            <text x="3045" y="955" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="bold" fill="#333333">12. المستخدمين والأجهزة (Config &amp; RBAC)</text>
+        
+<ellipse cx="3280" cy="995" rx="215" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="1000.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">إدارة حسابات الموظفين وتوزيع الأدوار</text>
+<ellipse cx="3280" cy="1065" rx="215" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="1070.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">تخصيص أذونات الكاشير والمشرفين</text>
+<ellipse cx="3280" cy="1135" rx="215" ry="28" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="1140.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">ضبط الطابعات وأعمدة الفاتورة والضريبة</text>
+<ellipse cx="3280" cy="1205" rx="210" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="1210.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">ضبط كود الموازين الإلكترونية GS1</text>
+<ellipse cx="3280" cy="1275" rx="210" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="1280.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">أخذ نسخة احتياطية من SQLite</text>
+<ellipse cx="3280" cy="1345" rx="210" ry="26" fill="#ffffff" stroke="#000000" stroke-width="2.2" />
+<text x="3280" y="1350.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#000000">استعادة النسخة الاحتياطية وإصلاح البيانات</text>
+<line x1="280" y1="1180" x2="540" y2="300" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="375" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="450" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="525" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="600" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="535" y2="680" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="760" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="835" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="910" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="1120" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="1195" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="1270" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="1455" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="535" y2="1535" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="1835" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="1910" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="1985" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="540" y2="2060" stroke="#000000" stroke-width="1.8" />
+<line x1="280" y1="1180" x2="535" y2="2140" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2170" y2="1120" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2160" y2="1315" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="290" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="355" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="420" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="485" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="550" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="615" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="680" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="745" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2885" y2="995" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="1135" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="1205" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="1275" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2885" y2="1495" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2885" y2="1565" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="1635" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2885" y2="1705" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="1775" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="1955" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="2880" y2="2025" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3490" y2="295" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3490" y2="365" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3490" y2="435" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3490" y2="505" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3490" y2="575" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3490" y2="645" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3495" y2="995" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3495" y2="1065" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3495" y2="1135" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3490" y2="1205" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3490" y2="1275" stroke="#000000" stroke-width="1.8" />
+<line x1="3720" y1="1180" x2="3490" y2="1345" stroke="#000000" stroke-width="1.8" />
+
+            <line x1="985" y1="680" x2="1140" y2="560" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1017.5" y="600.0" width="90" height="18" fill="#ffffff" />
+            <text x="1062.5" y="612.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="985" y1="680" x2="1140" y2="650" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1017.5" y="645.0" width="90" height="18" fill="#ffffff" />
+            <text x="1062.5" y="657.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="985" y1="680" x2="1135" y2="740" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1015.0" y="690.0" width="90" height="18" fill="#ffffff" />
+            <text x="1060.0" y="702.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="535" y1="1535" x2="980" y2="1615" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="712.5" y="1555.0" width="90" height="18" fill="#ffffff" />
+            <text x="757.5" y="1567.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="985" y1="1535" x2="1140" y2="830" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1017.5" y="1162.5" width="90" height="18" fill="#ffffff" />
+            <text x="1062.5" y="1174.5" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="985" y1="1535" x2="1140" y2="920" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1017.5" y="1207.5" width="90" height="18" fill="#ffffff" />
+            <text x="1062.5" y="1219.5" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="535" y1="1535" x2="980" y2="1690" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="712.5" y="1592.5" width="90" height="18" fill="#ffffff" />
+            <text x="757.5" y="1604.5" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="535" y1="2140" x2="980" y2="2220" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="712.5" y="2160.0" width="90" height="18" fill="#ffffff" />
+            <text x="757.5" y="2172.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="1710" y1="1120" x2="2165" y2="1220" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1892.5" y="1150.0" width="90" height="18" fill="#ffffff" />
+            <text x="1937.5" y="1162.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="2415" y1="995" x2="2880" y2="1065" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="2602.5" y="1010.0" width="90" height="18" fill="#ffffff" />
+            <text x="2647.5" y="1022.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="2415" y1="995" x2="2880" y2="810" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="2602.5" y="882.5" width="90" height="18" fill="#ffffff" />
+            <text x="2647.5" y="894.5" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="980" y1="1120" x2="1710" y2="1120" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1300.0" y="1100.0" width="90" height="18" fill="#ffffff" />
+            <text x="1345.0" y="1112.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;extend&gt;&gt;</text>
+        
+
+            <line x1="980" y1="1195" x2="1710" y2="1120" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1300.0" y="1137.5" width="90" height="18" fill="#ffffff" />
+            <text x="1345.0" y="1149.5" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;extend&gt;&gt;</text>
+        
+
+            <line x1="980" y1="910" x2="1710" y2="1120" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1300.0" y="995.0" width="90" height="18" fill="#ffffff" />
+            <text x="1345.0" y="1007.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;extend&gt;&gt;</text>
+        
+
+            <line x1="980" y1="1270" x2="1710" y2="1120" stroke="#000000" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#dashed-arrow)" />
+            <rect x="1300.0" y="1175.0" width="90" height="18" fill="#ffffff" />
+            <text x="1345.0" y="1187.0" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#000000">&lt;&lt;extend&gt;&gt;</text>
+        
+<text x="2000" y="2655" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-style="italic" text-anchor="middle" fill="#444444">تم إنشاء وتصميم هذا المخطط وفقاً لأعلى المعايير الأكاديمية لهندسة البرمجيات (OMG UML 2.5 Specification) لمناقشة مشروع التخرج</text>
+</svg>

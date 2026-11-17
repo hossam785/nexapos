@@ -1,24 +1,24 @@
 const RUNTIME_SHELLS = {
   combined: {
-    windowTitle: 'MGIVIA POS',
+    windowTitle: 'NEXA POS',
     launchWindow: true,
     defaultPage: 'cashier',
     rendererMode: 'combined',
   },
   admin: {
-    windowTitle: 'MGIVIA POS',
+    windowTitle: 'NEXA POS',
     launchWindow: true,
-    defaultPage: 'reports',
+    defaultPage: 'cashier',
     rendererMode: 'admin',
   },
   cashier: {
-    windowTitle: 'MGIVIA POS',
+    windowTitle: 'NEXA POS',
     launchWindow: true,
     defaultPage: 'cashier',
     rendererMode: 'cashier',
   },
   server: {
-    windowTitle: 'MGIVIA POS Server',
+    windowTitle: 'NEXA POS Server',
     launchWindow: false,
     defaultPage: null,
     rendererMode: 'server',

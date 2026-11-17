@@ -18,14 +18,14 @@ function sleep(ms) {
 
 const targets = {
   admin: {
-    processNames: ['MGIVIA POS', 'MGIVIA POS admin'],
+    processNames: ['NEXA POS', 'NEXA POS admin', 'MGIVIA POS', 'MGIVIA POS admin'],
     releaseDirs: [
       path.join(__dirname, '..', 'releases', 'admin'),
       path.join(__dirname, '..', 'releases', 'Final Setups'),
     ],
   },
   cashier: {
-    processNames: ['MGIVIA POS', 'MGIVIA POS cashier'],
+    processNames: ['NEXA POS', 'NEXA POS cashier', 'MGIVIA POS', 'MGIVIA POS cashier'],
     releaseDirs: [
       path.join(__dirname, '..', 'releases', 'Cashier'),
       path.join(__dirname, '..', 'releases', 'Final Setups'),

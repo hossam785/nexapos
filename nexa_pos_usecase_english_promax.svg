@@ -1,0 +1,352 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5000 3400" width="5000" height="3400" style="background-color: #ffffff;">
+<defs>
+
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
+        </marker>
+        <marker id="dashed-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="#000000" stroke-width="2.2" />
+        </marker>
+    
+</defs>
+<rect width="5000" height="3400" fill="#ffffff" />
+<rect x="25" y="25" width="4950" height="3350" fill="none" stroke="#000000" stroke-width="5" />
+<rect x="35" y="35" width="4930" height="3330" fill="none" stroke="#000000" stroke-width="2" />
+<text x="2500" y="100" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="44" font-weight="900" text-anchor="middle" fill="#000000">NEXA POS System - Comprehensive Retail, Wholesale &amp; Supply Chain (UML Use Case Diagram)</text>
+<text x="2500" y="150" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="24" font-weight="600" text-anchor="middle" fill="#444444">Comprehensive Academic UML 2.5 Use Case Specification - High-Resolution Print Ready</text>
+<rect x="480" y="190" width="4040" height="3120" fill="#ffffff" stroke="#000000" stroke-width="4" rx="20" />
+<rect x="510" y="165" width="540" height="50" fill="#ffffff" stroke="#000000" stroke-width="3" rx="10" />
+<text x="780" y="200" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#000000">NEXA POS System Boundary</text>
+<circle cx="240" cy="1400" r="45" fill="#ffffff" stroke="#000000" stroke-width="5" />
+<line x1="240" y1="1445" x2="240" y2="1600" stroke="#000000" stroke-width="5" />
+<line x1="155" y1="1510" x2="325" y2="1510" stroke="#000000" stroke-width="5" />
+<line x1="240" y1="1600" x2="170" y2="1750" stroke="#000000" stroke-width="5" />
+<line x1="240" y1="1600" x2="310" y2="1750" stroke="#000000" stroke-width="5" />
+<rect x="65" y="1775" width="350" height="60" fill="#ffffff" stroke="#000000" stroke-width="3" rx="10" />
+<text x="240" y="1815" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="26" font-weight="900" text-anchor="middle" fill="#000000">Cashier</text>
+<circle cx="4760" cy="1400" r="45" fill="#ffffff" stroke="#000000" stroke-width="5" />
+<line x1="4760" y1="1445" x2="4760" y2="1600" stroke="#000000" stroke-width="5" />
+<line x1="4675" y1="1510" x2="4845" y2="1510" stroke="#000000" stroke-width="5" />
+<line x1="4760" y1="1600" x2="4690" y2="1750" stroke="#000000" stroke-width="5" />
+<line x1="4760" y1="1600" x2="4830" y2="1750" stroke="#000000" stroke-width="5" />
+<rect x="4585" y="1775" width="350" height="60" fill="#ffffff" stroke="#000000" stroke-width="3" rx="10" />
+<text x="4760" y="1815" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="26" font-weight="900" text-anchor="middle" fill="#000000">Store Manager / Admin</text>
+
+            <rect x="530" y="260" width="740" height="930" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="550" y="244" width="488" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="565" y="266" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">1. POS &amp; Checkout Operations</text>
+        
+<ellipse cx="900" cy="340" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="347.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Scan Barcode &amp; Electronic Scale</text>
+<ellipse cx="900" cy="430" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="437.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Manage Multi-Tab Carts (1-5)</text>
+<ellipse cx="900" cy="520" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="527.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Adjust Item Quantities (+ / -)</text>
+<ellipse cx="900" cy="610" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="617.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Apply Line Item or Cart Discount</text>
+<ellipse cx="900" cy="700" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="707.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Assign Customer to Invoice</text>
+<ellipse cx="900" cy="800" rx="320" ry="40" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="807.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Process Multi-Tender Split Payment</text>
+<ellipse cx="900" cy="900" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="907.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Fast Checkout (No Print)</text>
+<ellipse cx="900" cy="990" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="997.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Auto Crash-Recovery Session</text>
+<ellipse cx="900" cy="1080" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" stroke-dasharray="8,6" />
+<text x="900" y="1087.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Clear / Void Full Cart</text>
+
+            <rect x="530" y="1220" width="740" height="380" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="550" y="1204" width="648" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="565" y="1226" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">2. Security-Restricted Cashier Actions</text>
+        
+<ellipse cx="900" cy="1310" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" stroke-dasharray="8,6" />
+<text x="900" y="1317.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Override Unit Sale Price</text>
+<ellipse cx="900" cy="1400" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" stroke-dasharray="8,6" />
+<text x="900" y="1407.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Remove Item from Active Cart</text>
+<ellipse cx="900" cy="1490" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" stroke-dasharray="8,6" />
+<text x="900" y="1497.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Restricted / No-Receipt Return</text>
+
+            <rect x="530" y="1630" width="740" height="480" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="550" y="1614" width="536" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="565" y="1636" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">3. Returns &amp; Refunds Operations</text>
+        
+<ellipse cx="900" cy="1720" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="1727.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Lookup Invoice by Barcode / ID</text>
+<ellipse cx="900" cy="1820" rx="320" ry="40" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="1827.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Select Return Items &amp; Quantities</text>
+<ellipse cx="900" cy="1920" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="1927.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Fair Pro-Rata Discount Reversal</text>
+<ellipse cx="900" cy="2010" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="2017.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Print Official Return Voucher</text>
+
+            <rect x="530" y="2140" width="740" height="760" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="550" y="2124" width="584" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="565" y="2146" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">4. Shifts &amp; Cash Drawer Operations</text>
+        
+<ellipse cx="900" cy="2230" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="2237.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Open Shift with Initial Float</text>
+<ellipse cx="900" cy="2320" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="2327.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Record Mid-Shift Cash Deposit (Drop)</text>
+<ellipse cx="900" cy="2410" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="2417.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Record Cash Outflow / Expense</text>
+<ellipse cx="900" cy="2500" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="2507.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Count Physical Denominations</text>
+<ellipse cx="900" cy="2600" rx="320" ry="40" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="2607.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Close Shift &amp; Compute Variance</text>
+<ellipse cx="900" cy="2700" rx="310" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="900" y="2707.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Print Shift Handover X-Report</text>
+
+            <rect x="1380" y="580" width="680" height="720" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="1400" y="564" width="440" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="1415" y="586" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">5. Checkout Auto-Includes</text>
+        
+<ellipse cx="1720" cy="680" rx="290" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="1720" y="687.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Auto-Calculate Customer Change</text>
+<ellipse cx="1720" cy="790" rx="290" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="1720" y="797.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Auto Kick Cash Drawer (ESC/POS)</text>
+<ellipse cx="1720" cy="900" rx="300" ry="38" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="1720" y="907.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Print Thermal Receipt &amp; Tax Columns</text>
+<ellipse cx="1720" cy="1010" rx="290" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="1720" y="1017.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Auto-Restock Returned Goods (FIFO)</text>
+<ellipse cx="1720" cy="1120" rx="290" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="1720" y="1127.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Payout Refund (Cash or Balance)</text>
+
+            <rect x="2160" y="1180" width="680" height="460" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="2180" y="1164" width="600" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="2195" y="1186" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">6. Supervisor PIN &amp; Audit Subsystem</text>
+        
+<ellipse cx="2500" cy="1300" rx="310" ry="42" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="2500" y="1307.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Supervisor PIN Code Authorization</text>
+<ellipse cx="2500" cy="1420" rx="300" ry="38" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="2500" y="1427.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Append Immutable Audit Trail Entry</text>
+<ellipse cx="2500" cy="1530" rx="290" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="2500" y="1537.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Day-End Settlement &amp; Z-Report</text>
+
+            <rect x="2960" y="260" width="880" height="850" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="2980" y="244" width="552" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="2995" y="266" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">7. Inventory, Products &amp; Batches</text>
+        
+<ellipse cx="3400" cy="340" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="347.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Add / Update Product Record &amp; Units</text>
+<ellipse cx="3400" cy="425" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="432.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Manage Units &amp; Multi-Barcodes</text>
+<ellipse cx="3400" cy="510" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="517.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Multi-Tier: Retail / Wholesale / Semi</text>
+<ellipse cx="3400" cy="595" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="602.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Track Batches &amp; Expiry Dates (FIFO)</text>
+<ellipse cx="3400" cy="680" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="687.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Low-Stock &amp; Expiry Pre-Alerts</text>
+<ellipse cx="3400" cy="765" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="772.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Physical Stock Audit &amp; Adjustments</text>
+<ellipse cx="3400" cy="850" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="857.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Design &amp; Print Barcode Labels</text>
+<ellipse cx="3400" cy="935" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="942.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Bulk Import / Export via Excel</text>
+<ellipse cx="3400" cy="1020" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="1027.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Auto Weighted Average Cost Update</text>
+
+            <rect x="2960" y="1140" width="880" height="600" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="2980" y="1124" width="584" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="2995" y="1146" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">8. Purchases &amp; Supplier Management</text>
+        
+<ellipse cx="3400" cy="1220" rx="320" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="1227.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Record New Purchase Invoice</text>
+<ellipse cx="3400" cy="1310" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="1317.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Record Supplier Batches &amp; Expiry</text>
+<ellipse cx="3400" cy="1400" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="1407.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Supplier Debt Installments &amp; Ledger</text>
+<ellipse cx="3400" cy="1490" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="1497.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Supplier Statement of Account</text>
+<ellipse cx="3400" cy="1580" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="1587.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Process Purchase Return to Supplier</text>
+<ellipse cx="3400" cy="1665" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="1672.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Track Supplier Payment Due Dates</text>
+
+            <rect x="2960" y="1770" width="880" height="520" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="2980" y="1754" width="616" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="2995" y="1776" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">9. Wholesale Clients Subsystem (B2B)</text>
+        
+<ellipse cx="3400" cy="1850" rx="320" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="1857.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Register Wholesale Clients &amp; Credit</text>
+<ellipse cx="3400" cy="1940" rx="320" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="1947.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Issue B2B Wholesale Special Invoices</text>
+<ellipse cx="3400" cy="2030" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="2037.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Collect Wholesale Customer Debts</text>
+<ellipse cx="3400" cy="2120" rx="320" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="2127.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Print Customer Statement of Account</text>
+<ellipse cx="3400" cy="2210" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="2217.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Aging Receivables &amp; Overdue Debt</text>
+
+            <rect x="2960" y="2320" width="880" height="390" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="2980" y="2304" width="584" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="2995" y="2326" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">10. Expenses &amp; Shrinkage Subsystem</text>
+        
+<ellipse cx="3400" cy="2400" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="2407.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Record &amp; Categorize Expense Voucher</text>
+<ellipse cx="3400" cy="2490" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="2497.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Log Damaged / Expired Shrinkage</text>
+<ellipse cx="3400" cy="2580" rx="320" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="3400" y="2587.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Auto-Deduct Waste &amp; Loss Tally</text>
+
+            <rect x="3900" y="260" width="560" height="850" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="3920" y="244" width="488" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="3935" y="266" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">11. Financial BI &amp; Analytics</text>
+        
+<ellipse cx="4180" cy="345" rx="250" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="352.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Sales: Hourly, Daily, Monthly</text>
+<ellipse cx="4180" cy="435" rx="250" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="442.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Gross &amp; Net Profit Margin Analysis</text>
+<ellipse cx="4180" cy="525" rx="250" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="532.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">ABC Best-Selling &amp; Profitable Items</text>
+<ellipse cx="4180" cy="615" rx="250" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="622.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Cash Flow &amp; Vault Journal Ledger</text>
+<ellipse cx="4180" cy="705" rx="250" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="712.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Tax &amp; VAT Declaration Summary</text>
+<ellipse cx="4180" cy="795" rx="250" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="802.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Export All Reports to PDF &amp; Excel</text>
+
+            <rect x="3900" y="1140" width="560" height="850" fill="#fcfcfc" stroke="#333333" stroke-width="2" stroke-dasharray="6,6" rx="14" />
+            <rect x="3920" y="1124" width="552" height="32" fill="#ffffff" stroke="#333333" stroke-width="1.5" rx="6" />
+            <text x="3935" y="1146" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">12. Users, RBAC &amp; Hardware Setup</text>
+        
+<ellipse cx="4180" cy="1225" rx="255" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="1232.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Manage Staff Accounts &amp; Roles</text>
+<ellipse cx="4180" cy="1315" rx="255" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="1322.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Configure Granular User Permissions</text>
+<ellipse cx="4180" cy="1405" rx="255" ry="34" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="1412.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Printer &amp; Receipt Column Setup</text>
+<ellipse cx="4180" cy="1495" rx="250" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="1502.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Electronic Scale &amp; GS1 Prefix Config</text>
+<ellipse cx="4180" cy="1585" rx="250" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="1592.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Backup SQLite Database Snapshot</text>
+<ellipse cx="4180" cy="1675" rx="250" ry="32" fill="#ffffff" stroke="#000000" stroke-width="2.8" />
+<text x="4180" y="1682.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#000000">Restore Database &amp; Recovery Tools</text>
+<line x1="325" y1="1510" x2="590" y2="340" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="430" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="520" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="610" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="700" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="580" y2="800" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="900" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="990" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="1080" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="1310" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="1400" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="1490" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="1720" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="580" y2="1820" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="2230" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="2320" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="2410" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="590" y2="2500" stroke="#000000" stroke-width="2.4" />
+<line x1="325" y1="1510" x2="580" y2="2600" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="2810" y2="1300" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="2790" y2="1530" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="340" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="425" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="510" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="595" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="680" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="765" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="850" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="935" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="1220" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="1400" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="1490" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="1580" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="1850" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="1940" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="2030" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="2120" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="2210" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="2400" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="3720" y2="2490" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4430" y2="345" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4430" y2="435" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4430" y2="525" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4430" y2="615" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4430" y2="705" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4430" y2="795" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4435" y2="1225" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4435" y2="1315" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4435" y2="1405" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4430" y2="1495" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4430" y2="1585" stroke="#000000" stroke-width="2.4" />
+<line x1="4675" y1="1510" x2="4430" y2="1675" stroke="#000000" stroke-width="2.4" />
+
+            <line x1="1220" y1="800" x2="1430" y2="680" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="1270.0" y="716.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="1325.0" y="734.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="1220" y1="800" x2="1430" y2="790" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="1270.0" y="771.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="1325.0" y="789.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="1220" y1="800" x2="1420" y2="900" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="1265.0" y="826.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="1320.0" y="844.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="580" y1="1820" x2="1210" y2="1920" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="840.0" y="1846.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="895.0" y="1864.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="1220" y1="1820" x2="1430" y2="1010" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="1270.0" y="1391.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="1325.0" y="1409.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="1220" y1="1820" x2="1430" y2="1120" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="1270.0" y="1446.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="1325.0" y="1464.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="580" y1="1820" x2="1210" y2="2010" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="840.0" y="1891.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="895.0" y="1909.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="580" y1="2600" x2="1210" y2="2700" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="840.0" y="2626.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="895.0" y="2644.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="2190" y1="1300" x2="2800" y2="1420" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="2440.0" y="1336.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="2495.0" y="1354.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="3080" y1="1220" x2="3720" y2="1310" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="3345.0" y="1241.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="3400.0" y="1259.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="3080" y1="1220" x2="3720" y2="1020" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="3345.0" y="1096.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="3400.0" y="1114.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;include&gt;&gt;</text>
+        
+
+            <line x1="1210" y1="1310" x2="2190" y2="1300" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="1645.0" y="1281.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="1700.0" y="1299.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;extend&gt;&gt;</text>
+        
+
+            <line x1="1210" y1="1400" x2="2190" y2="1300" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="1645.0" y="1326.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="1700.0" y="1344.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;extend&gt;&gt;</text>
+        
+
+            <line x1="1210" y1="1080" x2="2190" y2="1300" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="1645.0" y="1166.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="1700.0" y="1184.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;extend&gt;&gt;</text>
+        
+
+            <line x1="1210" y1="1490" x2="2190" y2="1300" stroke="#000000" stroke-width="2.4" stroke-dasharray="8,6" marker-end="url(#dashed-arrow)" />
+            <rect x="1645.0" y="1371.0" width="110" height="24" fill="#ffffff" stroke="#000000" stroke-width="1.2" rx="4" />
+            <text x="1700.0" y="1389.0" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="14" font-weight="900" text-anchor="middle" fill="#000000">&lt;&lt;extend&gt;&gt;</text>
+        
+<text x="2500" y="3350" font-family="'Segoe UI', 'Cairo', Tahoma, Arial, sans-serif" font-size="20" font-weight="bold" font-style="italic" text-anchor="middle" fill="#222222">Engineered and Designed to OMG UML 2.5 Software Engineering Standards for Academic Thesis Defense</text>
+</svg>

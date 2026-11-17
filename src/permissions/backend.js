@@ -28,7 +28,9 @@ function buildPermissionState(permissionKeys = []) {
 }
 
 function getTemplatePermissionKeysForRole(role = 'cashier') {
-  return buildPermissionKeys(role === 'admin' ? 'full' : 'cashier')
+  if (role === 'admin' || role === 'full') return buildPermissionKeys('full')
+  if (definitions.templates[role]) return buildPermissionKeys(role)
+  return buildPermissionKeys('cashier')
 }
 
 function hasPagePermission(permissionState, pageKey) {

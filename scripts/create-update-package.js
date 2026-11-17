@@ -362,35 +362,57 @@ function main() {
   fs.writeFileSync(path.join(updatePackageDir, 'تعليمات_التحديث.txt'), readmeContent, 'utf8')
   fs.writeFileSync(path.join(updatePackageDir, 'README.txt'), readmeContent, 'utf8')
 
+  // Create ZIP inside releases/
+  const releaseZip = path.join(releasesDir, 'NEXA_POS_Offline_Update.zip')
+  if (fs.existsSync(releaseZip)) {
+    fs.unlinkSync(releaseZip)
+  }
+  try {
+    execSync(
+      `powershell -Command "Compress-Archive -Path '${updatePackageDir}\\*' -DestinationPath '${releaseZip}' -Force"`,
+      { stdio: 'inherit' }
+    )
+    console.log(`✅ Release ZIP package created: ${releaseZip}`)
+  } catch (zipErr) {
+    console.warn('Could not create release ZIP automatically:', zipErr.message)
+  }
+
   // Copy to Desktop
   const userDesktop = path.join('C:', 'Users', '20114', 'Desktop')
   const desktopPackageDir = path.join(userDesktop, 'NEXA_POS_Offline_Update')
   const desktopZip = path.join(userDesktop, 'NEXA_POS_Offline_Update.zip')
+  let desktopUpdated = false
 
   if (fs.existsSync(userDesktop)) {
-    console.log('📋 Copying update package to Desktop...')
-    safeRemoveDir(desktopPackageDir)
-    copyRecursiveSync(updatePackageDir, desktopPackageDir)
-
-    console.log('🗜️ Creating ZIP archive on Desktop for easy sharing...')
-    if (fs.existsSync(desktopZip)) {
-      fs.unlinkSync(desktopZip)
-    }
     try {
-      execSync(
-        `powershell -Command "Compress-Archive -Path '${desktopPackageDir}\\*' -DestinationPath '${desktopZip}' -Force"`,
-        { stdio: 'inherit' }
-      )
+      console.log('📋 Copying update package to Desktop...')
+      safeRemoveDir(desktopPackageDir)
+      copyRecursiveSync(updatePackageDir, desktopPackageDir)
+
+      console.log('🗜️ Creating ZIP archive on Desktop for easy sharing...')
+      if (fs.existsSync(desktopZip)) {
+        fs.unlinkSync(desktopZip)
+      }
+      if (fs.existsSync(releaseZip)) {
+        fs.copyFileSync(releaseZip, desktopZip)
+      } else {
+        execSync(
+          `powershell -Command "Compress-Archive -Path '${desktopPackageDir}\\*' -DestinationPath '${desktopZip}' -Force"`,
+          { stdio: 'inherit' }
+        )
+      }
+      desktopUpdated = true
       console.log(`✅ ZIP package created: ${desktopZip}`)
-    } catch (zipErr) {
-      console.warn('Could not create ZIP automatically:', zipErr.message)
+    } catch (err) {
+      console.warn('Could not copy to Desktop directly:', err.message)
     }
   }
 
   console.log('\n======================================================')
   console.log('✨ Offline Update Package generated successfully!')
   console.log(`📁 Folder: ${updatePackageDir}`)
-  if (fs.existsSync(userDesktop)) {
+  console.log(`📦 ZIP:    ${releaseZip}`)
+  if (desktopUpdated) {
     console.log(`🖥️ Desktop Folder: ${desktopPackageDir}`)
     console.log(`📦 Desktop ZIP:    ${desktopZip}`)
   }

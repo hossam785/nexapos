@@ -2,6 +2,27 @@ const fs = require('fs')
 const path = require('path')
 const { execFileSync } = require('child_process')
 
+try {
+  const sevenZipBin = require('7zip-bin')
+  const cached7za = path.join(
+    process.env.LOCALAPPDATA || '',
+    'electron-builder',
+    'Cache',
+    '7zip@1.0.0',
+    '7zip-win-x64-a34pt',
+    'bin',
+    '7za.exe'
+  )
+  if (fs.existsSync(cached7za)) {
+    sevenZipBin.path7za = cached7za
+  }
+} catch {}
+
+try {
+  const macosVersion = require('app-builder-lib/out/util/macosVersion')
+  macosVersion.isMacOsCatalina = () => true
+} catch {}
+
 module.exports = {
   asar: true,
   files: [

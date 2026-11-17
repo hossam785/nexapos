@@ -35,12 +35,18 @@ function main() {
   const desktopExe = path.join('C:', 'Users', '20114', 'Desktop', 'NEXA POS Update Setup.exe')
 
   if (fs.existsSync(outputExe)) {
-    fs.copyFileSync(outputExe, desktopExe)
-    const stats = fs.statSync(desktopExe)
+    const stats = fs.statSync(outputExe)
     const sizeMb = (stats.size / (1024 * 1024)).toFixed(1)
+    let copiedPath = outputExe
+    try {
+      fs.copyFileSync(outputExe, desktopExe)
+      copiedPath = desktopExe
+    } catch (err) {
+      console.warn('Could not copy to Desktop directly:', err.message)
+    }
     console.log('\n======================================================')
     console.log('🎉 Update Installer Built Successfully!')
-    console.log(`📁 File: ${desktopExe}`)
+    console.log(`📁 File: ${copiedPath}`)
     console.log(`📦 Size: ${sizeMb} MB (Single standalone setup file)`)
     console.log('======================================================\n')
   }
